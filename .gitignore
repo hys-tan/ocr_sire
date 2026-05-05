@@ -1,0 +1,47 @@
+# Entornos Virtuales
+venv/
+env/
+.venv/
+
+# Python / FastAPI
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+htmlcov/
+
+# Node.js / React
+frontend/node_modules/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# Compilados de Vite / React
+frontend/dist/
+frontend/build/
+dist/
+build/
+
+# Variables de Entorno (¡CRÍTICO: NUNCA SUBIR CONTRASEÑAS!)
+.env
+.env.local
+.env.*.local
+
+# Machine Learning / Modelos Pesados
+*.pkl
+*.h5
+*.model
+backend/ml/models/*.pkl
+backend/ml/models/*.h5
+
+# Archivos de Sistema Operativo
+.DS_Store
+Thumbs.db
+
+# Configuración de Editores (Opcional, pero recomendado omitir)
+.vscode/
+.idea/
+*.swp
