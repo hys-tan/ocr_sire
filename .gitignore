@@ -45,3 +45,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Archivos Locales Sensibles
+backend/assets/
