@@ -35,16 +35,16 @@ def run_evaluation():
     datos_extraidos = parse_invoice(texto_limpio)     # FASE 2 y 4: Extracción
     datos_finales = clean_extracted_data(datos_extraidos) # FASE 3 y 5: Validación
     
-    # Aplanar diccionario extraído para comparar
+    # Aplanar diccionario extraído para comparar extrayendo solo el "valor"
     extracted_flat = {
-        "comprobante.tipo": datos_finales["comprobante"]["tipo"],
-        "comprobante.serie_numero": datos_finales["comprobante"]["serie_numero"],
-        "comprobante.fecha_emision": datos_finales["comprobante"]["fecha_emision"],
-        "emisor.ruc": datos_finales["emisor"]["ruc"],
+        "comprobante.tipo": datos_finales["comprobante"]["tipo"]["valor"],
+        "comprobante.serie_numero": datos_finales["comprobante"]["serie_numero"]["valor"],
+        "comprobante.fecha_emision": datos_finales["comprobante"]["fecha_emision"]["valor"],
+        "emisor.ruc": datos_finales["emisor"]["ruc"]["valor"],
         "emisor.razon_social": datos_finales["emisor"]["razon_social"]["valor"] if isinstance(datos_finales["emisor"]["razon_social"], dict) else datos_finales["emisor"]["razon_social"],
-        "receptor.ruc_dni": datos_finales["receptor"]["ruc_dni"],
+        "receptor.ruc_dni": datos_finales["receptor"]["ruc_dni"]["valor"],
         "receptor.razon_social": datos_finales["receptor"]["razon_social"]["valor"] if isinstance(datos_finales["receptor"]["razon_social"], dict) else datos_finales["receptor"]["razon_social"],
-        "montos.total": datos_finales["montos"]["total"],
+        "montos.total": datos_finales["montos"]["total"]["valor"],
     }
     
     aciertos = 0

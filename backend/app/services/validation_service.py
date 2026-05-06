@@ -30,23 +30,31 @@ def is_valid_ruc(ruc: str) -> bool:
         
     return int(ruc[10]) == digito_esperado
 
-def validate_math(montos: Dict[str, float]) -> Dict[str, float]:
+def validate_math(montos: Dict[str, Any]) -> Dict[str, Any]:
     """
     Fase 3: Validación Matemática.
     Asegura la coherencia de Subtotal, IGV y Total.
     """
-    subtotal = montos.get("subtotal", 0.0)
-    igv = montos.get("igv", 0.0)
-    total = montos.get("total", 0.0)
+    subtotal = montos["subtotal"]["valor"]
+    igv = montos["igv"]["valor"]
+    total = montos["total"]["valor"]
     
     # Si tenemos el total, forzamos la cuadratura según SUNAT (IGV 18%)
     if total > 0:
         subtotal_calculado = round(total / 1.18, 2)
         igv_calculado = round(total - subtotal_calculado, 2)
         
-        # Actualizamos siempre para corregir errores de OCR en el IGV o Subtotal
-        montos["subtotal"] = subtotal_calculado
-        montos["igv"] = igv_calculado
+        # Si la diferencia es muy grande, significa que el OCR leyó mal, así que bajamos la confianza
+        if abs(subtotal - subtotal_calculado) > 1.0 or abs(igv - igv_calculado) > 1.0:
+            montos["subtotal"]["confianza"] = "BAJA"
+            montos["igv"]["confianza"] = "BAJA"
+            montos["subtotal"]["estrategia"] = "Corregido matemáticamente (OCR falló)"
+            montos["igv"]["estrategia"] = "Corregido matemáticamente (OCR falló)"
+            
+        # Actualizamos siempre para corregir errores
+        montos["subtotal"]["valor"] = subtotal_calculado
+        montos["igv"]["valor"] = igv_calculado
+        montos["total"]["confianza"] = "ALTA" # Si todo cuadra, el total es confiable
         
     return montos
 
@@ -65,14 +73,18 @@ def clean_extracted_data(data: Dict[str, Any]) -> Dict[str, Any]:
     if receptor_rs and receptor_rs != "No detectado":
         data["receptor"]["razon_social"]["valor"] = receptor_rs.title()
         
-    # Validar RUC matemáticamente
-    emisor_ruc = data["emisor"]["ruc"]
+    # Validar RUC matemáticamente y ajustar confianza
+    emisor_ruc = data["emisor"]["ruc"]["valor"]
     if emisor_ruc and not is_valid_ruc(emisor_ruc):
-        data["emisor"]["ruc"] = f"{emisor_ruc} (Inválido)"
+        data["emisor"]["ruc"]["valor"] = f"{emisor_ruc} (Inválido)"
+        data["emisor"]["ruc"]["confianza"] = "BAJA"
+        data["emisor"]["ruc"]["estrategia"] = "Error Validación: Módulo 11 falló"
         
-    receptor_ruc = data["receptor"]["ruc_dni"]
+    receptor_ruc = data["receptor"]["ruc_dni"]["valor"]
     if receptor_ruc and len(receptor_ruc) == 11 and not is_valid_ruc(receptor_ruc):
-        data["receptor"]["ruc_dni"] = f"{receptor_ruc} (Inválido)"
+        data["receptor"]["ruc_dni"]["valor"] = f"{receptor_ruc} (Inválido)"
+        data["receptor"]["ruc_dni"]["confianza"] = "BAJA"
+        data["receptor"]["ruc_dni"]["estrategia"] = "Error Validación: Módulo 11 falló"
         
     # Formatear Montos a 2 decimales string (opcional para el Frontend)
     # Por ahora los dejamos como float, pero aplicamos la cuadratura matemática

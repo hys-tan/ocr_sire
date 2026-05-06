@@ -11,51 +11,50 @@ logging.basicConfig(
 logger = logging.getLogger("ExtractorSIRE")
 
 def extract_ruc(text: str) -> list:
-    """Extrae todos los RUCs (11 dígitos que empiezan con 10, 15 o 20) válidos en Perú."""
-    return re.findall(r'\b(?:10|15|20)\d{9}\b', text)
+    """Extrae todos los RUCs válidos."""
+    rucs = re.findall(r'\b(?:10|15|17|20)\d{9}\b', text)
+    return [{"valor": r, "confianza": "ALTA", "estrategia": "Regex (11 dígitos, prefijo válido)"} for r in rucs]
 
-def extract_serie_numero(text: str) -> str:
-    """Extrae la serie y número (ej. F001-0083104 o B001-123456)."""
+def extract_serie_numero(text: str) -> Dict[str, Any]:
+    """Extrae la serie y número."""
     match = re.search(r'\b([FBE]\w{3})\s*-\s*(\d{1,8})\b', text, re.IGNORECASE)
     if match:
-        return f"{match.group(1).upper()}-{match.group(2)}"
-    return None
+        return {"valor": f"{match.group(1).upper()}-{match.group(2)}", "confianza": "ALTA", "estrategia": "Regex Serie-Número"}
+    return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado"}
 
-def extract_tipo_comprobante(text: str, serie: str) -> str:
-    """Determina el tipo de comprobante por texto o por la inicial de la serie."""
+def extract_tipo_comprobante(text: str, serie_dict: dict) -> Dict[str, Any]:
+    """Determina el tipo de comprobante."""
     texto_upper = text.upper()
+    serie = serie_dict["valor"] if serie_dict else None
+    
     if "FACTURA" in texto_upper or (serie and serie.startswith('F')):
-        return "Factura Electrónica"
+        return {"valor": "Factura Electrónica", "confianza": "ALTA", "estrategia": "Keyword/Prefijo Serie"}
     elif "BOLETA" in texto_upper or (serie and serie.startswith('B')):
-        return "Boleta de Venta Electrónica"
+        return {"valor": "Boleta de Venta Electrónica", "confianza": "ALTA", "estrategia": "Keyword/Prefijo Serie"}
     elif "NOTA DE CRÉDITO" in texto_upper or "NOTA DE CREDITO" in texto_upper:
-        return "Nota de Crédito"
-    return "Desconocido"
+        return {"valor": "Nota de Crédito", "confianza": "ALTA", "estrategia": "Keyword"}
+    return {"valor": "Desconocido", "confianza": "BAJA", "estrategia": "Fallback"}
 
-def extract_fecha(text: str) -> str:
-    """Extrae la fecha soportando múltiples separadores OCR (/, -, :, .) y la normaliza a DD/MM/YYYY."""
-    # Buscar formato numérico (ej. 16:04:2024, 16/04/2024, 16-04-2024, 16 . 04 . 2024)
+def extract_fecha(text: str) -> Dict[str, Any]:
+    """Extrae y normaliza la fecha."""
     match = re.search(r'\b(\d{2})\s*[/.\-:]\s*(\d{2})\s*[/.\-:]\s*(\d{4})\b', text)
     if match:
         dia, mes, anio = match.groups()
-        return f"{dia}/{mes}/{anio}"
-    return None
+        return {"valor": f"{dia}/{mes}/{anio}", "confianza": "ALTA", "estrategia": "Regex (Flex-Separators)"}
+    return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado"}
 
-def extract_montos(text: str) -> Dict[str, float]:
-    """
-    Busca montos (Subtotal, IGV, Total) y usa la lógica de SUNAT (IGV = 18%)
-    para intentar deducir o corregir los valores si el OCR falló en alguno.
-    """
-    montos = {"subtotal": 0.0, "igv": 0.0, "total": 0.0}
+def extract_montos(text: str) -> Dict[str, Any]:
+    """Busca montos (Subtotal, IGV, Total) devolviendo dicts de confianza."""
+    montos = {
+        "subtotal": {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default"},
+        "igv": {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default"},
+        "total": {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default"}
+    }
     
-    # Buscar todos los números con formato decimal (ej: 1,316.95 o 1554.00)
-    # Excluimos números larguísimos para no confundir con RUCs o cuentas
     cantidades = re.findall(r'\b\d{1,3}(?:,\d{3})*\.\d{2}\b', text)
-    
     if not cantidades:
         return montos
         
-    # Convertir a float
     valores = []
     for c in cantidades:
         try:
@@ -64,24 +63,24 @@ def extract_montos(text: str) -> Dict[str, float]:
         except ValueError:
             pass
             
-    # Heurística simple: El Total suele ser el número más grande al final de la factura
     if valores:
         posible_total = max(valores)
-        montos["total"] = posible_total
+        montos["total"] = {"valor": posible_total, "confianza": "MEDIA", "estrategia": "Valor Max (Heurística)"}
         
-        # Lógica SIRE Perú: Si tenemos el Total, podemos calcular el Subtotal y el IGV (18%)
-        # Total = Subtotal * 1.18  =>  Subtotal = Total / 1.18
-        # IGV = Total - Subtotal
-        montos["subtotal"] = round(posible_total / 1.18, 2)
-        montos["igv"] = round(posible_total - montos["subtotal"], 2)
+        # Validacion_service se encargará de ajustar la confianza si la matemática no cuadra
+        subtotal = round(posible_total / 1.18, 2)
+        igv = round(posible_total - subtotal, 2)
+        
+        montos["subtotal"] = {"valor": subtotal, "confianza": "MEDIA", "estrategia": "Cálculo desde Total (18%)"}
+        montos["igv"] = {"valor": igv, "confianza": "MEDIA", "estrategia": "Cálculo desde Total (18%)"}
         
     return montos
 
-def extract_moneda(text: str) -> str:
-    """Detecta PEN (Soles) o USD (Dólares)."""
+def extract_moneda(text: str) -> Dict[str, Any]:
+    """Detecta PEN o USD."""
     if re.search(r'\b(USD|DOLARES|\$)\b', text, re.IGNORECASE):
-        return "USD"
-    return "PEN" # Por defecto en Perú
+        return {"valor": "USD", "confianza": "ALTA", "estrategia": "Regex Keyword (USD)"}
+    return {"valor": "PEN", "confianza": "MEDIA", "estrategia": "Default Nacional"}
 
 def is_valid_razon_social(text: str) -> bool:
     """Aplica filtros negativos para descartar falsos positivos de Razón Social."""
@@ -192,19 +191,20 @@ def parse_invoice(raw_text: str) -> Dict[str, Any]:
     
     # RUCs
     rucs = extract_ruc(cleaned_text)
-    emisor_ruc = rucs[0] if len(rucs) > 0 else None
-    receptor_ruc = rucs[1] if len(rucs) > 1 else None
+    emisor_ruc_dict = rucs[0] if len(rucs) > 0 else {"valor": None, "confianza": "BAJA", "estrategia": "No detectado"}
+    receptor_ruc_dict = rucs[1] if len(rucs) > 1 else {"valor": None, "confianza": "BAJA", "estrategia": "No detectado"}
     
     # Razones Sociales (Fallback System)
     emisor_ruc_idx = -1
-    if emisor_ruc:
+    emisor_ruc_val = emisor_ruc_dict["valor"]
+    if emisor_ruc_val:
         for i, line in enumerate(lines):
-            if emisor_ruc in line:
+            if emisor_ruc_val in line:
                 emisor_ruc_idx = i
                 break
                 
     emisor_razon = extract_razon_social_emisor(lines, emisor_ruc_idx)
-    receptor_razon = extract_razon_social_receptor(lines, receptor_ruc)
+    receptor_razon = extract_razon_social_receptor(lines, receptor_ruc_dict["valor"])
     
     # Serie, Número y Tipo
     serie_numero = extract_serie_numero(cleaned_text)
@@ -219,7 +219,7 @@ def parse_invoice(raw_text: str) -> Dict[str, Any]:
     
     logger.info("=== Pipeline de Extracción Finalizado ===")
     
-    # Estructura de Salida
+    # Estructura de Salida (Todo envuelto en diccionarios de Confianza)
     return {
         "comprobante": {
             "tipo": tipo_comprobante,
@@ -228,11 +228,11 @@ def parse_invoice(raw_text: str) -> Dict[str, Any]:
             "moneda": moneda
         },
         "emisor": {
-            "ruc": emisor_ruc,
+            "ruc": emisor_ruc_dict,
             "razon_social": emisor_razon
         },
         "receptor": {
-            "ruc_dni": receptor_ruc,
+            "ruc_dni": receptor_ruc_dict,
             "razon_social": receptor_razon
         },
         "montos": montos
