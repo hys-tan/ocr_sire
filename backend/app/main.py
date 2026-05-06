@@ -1,10 +1,24 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.api import upload
 
 app = FastAPI(
     title="API OCR SIRE",
     description="API para procesar facturas y boletas usando OCR",
     version="1.0.0"
 )
+
+# Configuración CORS para permitir peticiones desde React (Frontend)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # En producción cambiar por la URL de React
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Incluir el enrutador de subida
+app.include_router(upload.router, prefix="/api/v1")
 
 @app.get("/")
 def read_root():

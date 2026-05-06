@@ -13,6 +13,25 @@ except ImportError:
 # Si tienes un error de "tesseract is not installed", descomenta la siguiente línea y verifica la ruta:
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
+def preprocess_image(img: np.ndarray) -> np.ndarray:
+    """Aplica filtros avanzados de visión computacional para mejorar el OCR."""
+    # 1. Resize: Aumentar resolución (2x) para capturar detalles finos
+    img = cv2.resize(img, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+    
+    # 2. Escala de Grises
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # 3. Denoise: Reducir ruido de escaneo/foto sin perder bordes
+    denoised = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
+    
+    # 4. Aumento de Contraste
+    contrast = cv2.convertScaleAbs(denoised, alpha=1.5, beta=0)
+    
+    # 5. Binarización de Otsu (convierte a blanco/negro puro óptimo)
+    _, thresh = cv2.threshold(contrast, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    return thresh
+
 def extract_text_from_image(image_path: str) -> str:
     """
     Extrae texto de una imagen (.png, .jpg) usando Tesseract OCR.
@@ -23,13 +42,11 @@ def extract_text_from_image(image_path: str) -> str:
     if img is None:
         raise ValueError(f"No se pudo cargar la imagen: {image_path}")
 
-    # Preprocesamiento Básico: Convertir a escala de grises
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # Aquí podríamos agregar más preprocesamiento (binarización, quitar ruido) en el futuro
+    # Preprocesamiento Avanzado con OpenCV
+    processed_img = preprocess_image(img)
     
     # Extraer texto indicando que el idioma es español
-    text = pytesseract.image_to_string(gray, lang='spa')
+    text = pytesseract.image_to_string(processed_img, lang='spa')
     return text.strip()
 
 def extract_text_from_pdf(pdf_path: str) -> str:
@@ -52,10 +69,16 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         pix = page.get_pixmap(matrix=mat)
         
         # Convertir Pixmap a formato PIL Image
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        img_pil = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        
+        # Convertir de PIL (RGB) a OpenCV (BGR)
+        img_cv = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2BGR)
+        
+        # Aplicar el Pipeline de Preprocesamiento
+        processed_img = preprocess_image(img_cv)
         
         # Pasar a Tesseract
-        text = pytesseract.image_to_string(img, lang='spa')
+        text = pytesseract.image_to_string(processed_img, lang='spa')
         full_text += f"\n--- Página {page_num + 1} ---\n"
         full_text += text
         
@@ -83,7 +106,7 @@ if __name__ == "__main__":
     print("Coloca una imagen o PDF en la carpeta 'assets' y cambia la ruta aquí abajo.")
     
     # Ruta relativa al directorio donde ejecutas el script (carpeta backend)
-    test_file = "assets/prueba.pdf" 
+    test_file = "assets/prueba2.pdf" 
     
     try:
         resultado = process_document(test_file)
