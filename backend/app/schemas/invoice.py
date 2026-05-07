@@ -17,7 +17,7 @@ class EmisorBase(BaseModel):
     razon_social: Optional[ConfidenceField] = Field(None)
 
 class ReceptorBase(BaseModel):
-    ruc_dni: Optional[str] = Field(None)
+    ruc_dni: Optional[ConfidenceField] = Field(None)
     razon_social: Optional[ConfidenceField] = Field(None)
 
 class MontosBase(BaseModel):

@@ -47,4 +47,26 @@ Thumbs.db
 *.swp
 
 # Archivos Locales Sensibles
-backend/assets/
+backend/assets/*
+!backend/assets/.gitkeep
+
+# --- Bases de Datos Locales ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Testing y Calidad de Código ---
+.coverage
+.mypy_cache/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+
+# --- Experimentos y Temporal ---
+.ipynb_checkpoints/
+*.tmp
+temp/
+
+# --- Logs adicionales ---
+*.log
