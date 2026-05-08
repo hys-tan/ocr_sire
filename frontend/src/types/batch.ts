@@ -14,6 +14,10 @@ export interface BatchFile {
   file: File;
   /** Estado actual en el pipeline */
   status: BatchStatus;
+  /** Número de páginas del PDF (undefined = aún no leído, null = PDF ilegible) */
+  pageCount?: number | null;
+  /** Error de validación previo al OCR (PDF corrupto, excede páginas, etc.) */
+  validationError?: string;
   /** Resultado de la extracción OCR (disponible cuando status = "completado" | "revision") */
   result?: import('./invoice').InvoiceResponse;
   /** Mensaje de error legible (disponible cuando status = "error") */
@@ -23,11 +27,13 @@ export interface BatchFile {
 // ─── Constantes de límites (fuente única de verdad para el frontend) ──────────
 
 export const BATCH_LIMITS = {
-  MAX_FILES:          10,
-  MAX_SIZE_PER_FILE:  10 * 1024 * 1024,   // 10 MB en bytes
-  MAX_TOTAL_SIZE:     50 * 1024 * 1024,   // 50 MB en bytes
-  ACCEPTED_TYPES:     ["application/pdf", "image/png", "image/jpeg"],
-  ACCEPTED_LABEL:     "PDF, PNG o JPG",
+  MAX_FILES:           10,
+  MAX_SIZE_PER_FILE:   10 * 1024 * 1024,   // 10 MB en bytes
+  MAX_TOTAL_SIZE:      50 * 1024 * 1024,   // 50 MB en bytes
+  MAX_PAGES_PER_FILE:  5,                  // páginas por PDF
+  MAX_PAGES_TOTAL:     15,                 // páginas totales del lote
+  ACCEPTED_TYPES:      ["application/pdf", "image/png", "image/jpeg"],
+  ACCEPTED_LABEL:      "PDF, PNG o JPG",
 } as const;
 
 // ─── Helpers de validación ────────────────────────────────────────────────────
