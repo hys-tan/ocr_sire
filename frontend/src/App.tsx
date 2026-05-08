@@ -2,6 +2,7 @@ import { useState } from 'react';
 import UploadSection from './components/UploadSection';
 import PDFViewer from './components/PDFViewer';
 import InvoiceResults from './components/InvoiceResults';
+import OCRMetrics from './components/OCRMetrics';
 import LoadingOverlay from './components/LoadingOverlay';
 import ErrorAlert from './components/ErrorAlert';
 import { extractInvoiceData } from './services/api';
@@ -74,9 +75,10 @@ export default function App() {
               <PDFViewer file={selectedFile} />
             </div>
             
-            {/* Mitad Derecha: JSON (Semáforo) */}
-            <div className="w-full lg:w-1/2">
+            {/* Mitad Derecha: Resultados + Métricas */}
+            <div className="w-full lg:w-1/2 flex flex-col gap-4">
               <InvoiceResults data={invoiceData} />
+              <OCRMetrics metricas={invoiceData.metricas} />
             </div>
           </div>
         )}

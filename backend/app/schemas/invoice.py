@@ -26,9 +26,17 @@ class MontosBase(BaseModel):
     igv: Optional[ConfidenceField] = Field(None)
     total: Optional[ConfidenceField] = Field(None)
 
+class MetricasOCR(BaseModel):
+    """Métricas automáticas generadas por el pipeline de extracción."""
+    tiempo_procesamiento: float = Field(..., description="Segundos totales del pipeline")
+    campos_detectados: int = Field(..., description="Campos con valor no nulo")
+    total_campos: int = Field(default=11, description="Total de campos del modelo")
+    score_promedio: int = Field(..., description="Promedio de scores de todos los campos (0-100)")
+
 class InvoiceResponse(BaseModel):
     """Modelo principal de respuesta que la API enviará al Frontend."""
     comprobante: ComprobanteBase
     emisor: EmisorBase
     receptor: ReceptorBase
     montos: MontosBase
+    metricas: MetricasOCR

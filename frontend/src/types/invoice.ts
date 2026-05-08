@@ -30,9 +30,17 @@ export interface Montos {
   total: ConfidenceField<number>;
 }
 
+export interface MetricasOCR {
+  tiempo_procesamiento: number;  // segundos
+  campos_detectados: number;
+  total_campos: number;
+  score_promedio: number;
+}
+
 export interface InvoiceResponse {
   comprobante: Comprobante;
   emisor: Emisor;
   receptor: Receptor;
   montos: Montos;
+  metricas: MetricasOCR;
 }
