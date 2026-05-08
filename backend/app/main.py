@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import upload
+from app.api import batch
 
 app = FastAPI(
     title="API OCR SIRE",
@@ -17,8 +18,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Incluir el enrutador de subida
+# Enrutadores
 app.include_router(upload.router, prefix="/api/v1")
+app.include_router(batch.router,  prefix="/api/v1")
 
 @app.get("/")
 def read_root():
