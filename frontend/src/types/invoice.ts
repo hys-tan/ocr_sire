@@ -4,6 +4,7 @@ export interface ConfidenceField<T = string | number | null> {
   valor: T;
   confianza: ConfianzaNivel;
   estrategia: string;
+  score: number;
 }
 
 export interface Comprobante {

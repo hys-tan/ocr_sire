@@ -5,10 +5,34 @@ interface InvoiceResultsProps {
   data: InvoiceResponse;
 }
 
-const ConfidenceBadge = ({ level, tooltip }: { level: ConfianzaNivel, tooltip: string }) => {
-  if (level === "ALTA") return <span title={tooltip}><CheckCircle2 className="text-green-500" size={18} /></span>;
-  if (level === "MEDIA") return <span title={tooltip}><AlertTriangle className="text-yellow-500" size={18} /></span>;
-  return <span title={tooltip}><XCircle className="text-red-500" size={18} /></span>;
+const ConfidenceBadge = ({ level, tooltip, score }: { level: ConfianzaNivel, tooltip: string, score: number }) => {
+  const pct = `${score}%`;
+  if (level === "ALTA") return (
+    <span title={tooltip} className="flex items-center space-x-1">
+      <CheckCircle2 className="text-green-500" size={16} />
+      <span className="text-xs font-bold text-green-600">{pct}</span>
+    </span>
+  );
+  if (level === "MEDIA") return (
+    <span title={tooltip} className="flex items-center space-x-1">
+      <AlertTriangle className="text-yellow-500" size={16} />
+      <span className="text-xs font-bold text-yellow-600">{pct}</span>
+    </span>
+  );
+  return (
+    <span title={tooltip} className="flex items-center space-x-1">
+      <XCircle className="text-red-500" size={16} />
+      <span className="text-xs font-bold text-red-600">{pct}</span>
+    </span>
+  );
+};
+
+const formatValue = (valor: any): string => {
+  if (valor === null || valor === undefined) return 'No detectado';
+  if (typeof valor === 'number') {
+    return valor.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return String(valor);
 };
 
 const FieldRow = ({ label, field }: { label: string, field: ConfidenceField<any> | undefined | null }) => {
@@ -22,22 +46,58 @@ const FieldRow = ({ label, field }: { label: string, field: ConfidenceField<any>
   else if (isMedia) bgClass = "bg-yellow-50/50 border-l-4 border-yellow-400";
   else bgClass = "border-l-4 border-green-500";
   
+  const displayValue = formatValue(field.valor);
+  
   return (
     <div className={`flex justify-between items-center p-3 border-b border-gray-100 last:border-0 ${bgClass}`}>
       <span className="text-sm font-medium text-gray-500 w-1/3 pl-2">{label}</span>
       <div className="flex items-center space-x-3 w-2/3 justify-end text-right">
-        <span className={`text-sm font-semibold truncate ${isBaja ? 'text-red-700' : 'text-gray-900'}`} title={String(field.valor)}>
-          {field.valor !== null && field.valor !== undefined ? String(field.valor) : 'No detectado'}
+        <span className={`text-sm font-semibold truncate ${isBaja ? 'text-red-700' : 'text-gray-900'}`} title={displayValue}>
+          {displayValue}
         </span>
         <div className="cursor-help flex-shrink-0">
-          <ConfidenceBadge level={field.confianza} tooltip={field.estrategia} />
+          <ConfidenceBadge level={field.confianza} tooltip={field.estrategia} score={field.score} />
         </div>
       </div>
     </div>
   );
 };
 
+// Calcula el score promedio ponderado de todos los campos del documento
+function calcularScoreGlobal(data: InvoiceResponse): number {
+  const campos = [
+    data.comprobante.tipo,
+    data.comprobante.serie_numero,
+    data.comprobante.fecha_emision,
+    data.comprobante.moneda,
+    data.emisor.ruc,
+    data.emisor.razon_social,
+    data.receptor.ruc_dni,
+    data.receptor.razon_social,
+    data.montos.subtotal,
+    data.montos.igv,
+    data.montos.total,
+  ];
+  const validos = campos.filter(Boolean) as ConfidenceField<any>[];
+  if (validos.length === 0) return 0;
+  const suma = validos.reduce((acc, f) => acc + (f.score ?? 0), 0);
+  return Math.round(suma / validos.length);
+}
+
 export default function InvoiceResults({ data }: InvoiceResultsProps) {
+  const scoreGlobal = calcularScoreGlobal(data);
+  const scoreColor =
+    scoreGlobal >= 80 ? 'text-green-600' :
+    scoreGlobal >= 55 ? 'text-yellow-600' :
+    'text-red-600';
+  const barColor =
+    scoreGlobal >= 80 ? 'bg-green-500' :
+    scoreGlobal >= 55 ? 'bg-yellow-400' :
+    'bg-red-500';
+  const label =
+    scoreGlobal >= 80 ? 'Alta precisión' :
+    scoreGlobal >= 55 ? 'Precisión media — Revisar campos marcados' :
+    'Baja precisión — Revisión manual recomendada';
   return (
     <div className="w-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full max-h-[700px]">
       <div className="bg-purple-600 text-white px-6 py-4 flex items-center justify-between">
@@ -105,10 +165,20 @@ export default function InvoiceResults({ data }: InvoiceResultsProps) {
 
       </div>
       
-      <div className="bg-gray-50 border-t border-gray-200 p-4 text-xs text-gray-500 text-center flex justify-center space-x-6">
-        <span className="flex items-center space-x-1"><CheckCircle2 size={14} className="text-green-500"/> <span>Confiable</span></span>
-        <span className="flex items-center space-x-1"><AlertTriangle size={14} className="text-yellow-500"/> <span>Revisar</span></span>
-        <span className="flex items-center space-x-1"><XCircle size={14} className="text-red-500"/> <span>No Confiable</span></span>
+      {/* Footer: Métrica global */}
+      <div className="bg-gray-50 border-t border-gray-200 px-5 py-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Precisión Global OCR</span>
+          <span className={`text-sm font-bold ${scoreColor}`}>{scoreGlobal}%</span>
+        </div>
+        {/* Barra de progreso */}
+        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+          <div
+            className={`h-2 rounded-full transition-all duration-700 ${barColor}`}
+            style={{ width: `${scoreGlobal}%` }}
+          />
+        </div>
+        <p className={`text-xs mt-2 ${scoreColor} font-medium`}>{label}</p>
       </div>
     </div>
   );

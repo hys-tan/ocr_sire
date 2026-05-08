@@ -50,11 +50,14 @@ def validate_math(montos: Dict[str, Any]) -> Dict[str, Any]:
             montos["igv"]["confianza"] = "BAJA"
             montos["subtotal"]["estrategia"] = "Corregido matemáticamente (OCR falló)"
             montos["igv"]["estrategia"] = "Corregido matemáticamente (OCR falló)"
+            montos["subtotal"]["score"] = 30
+            montos["igv"]["score"] = 30
             
         # Actualizamos siempre para corregir errores
         montos["subtotal"]["valor"] = subtotal_calculado
         montos["igv"]["valor"] = igv_calculado
-        montos["total"]["confianza"] = "ALTA" # Si todo cuadra, el total es confiable
+        montos["total"]["confianza"] = "ALTA"
+        montos["total"]["score"] = 90  # Total validado matemáticamente
         
     return montos
 
@@ -79,12 +82,14 @@ def clean_extracted_data(data: Dict[str, Any]) -> Dict[str, Any]:
         data["emisor"]["ruc"]["valor"] = f"{emisor_ruc} (Inválido)"
         data["emisor"]["ruc"]["confianza"] = "BAJA"
         data["emisor"]["ruc"]["estrategia"] = "Error Validación: Módulo 11 falló"
+        data["emisor"]["ruc"]["score"] = 10
         
     receptor_ruc = data["receptor"]["ruc_dni"]["valor"]
     if receptor_ruc and len(receptor_ruc) == 11 and not is_valid_ruc(receptor_ruc):
         data["receptor"]["ruc_dni"]["valor"] = f"{receptor_ruc} (Inválido)"
         data["receptor"]["ruc_dni"]["confianza"] = "BAJA"
         data["receptor"]["ruc_dni"]["estrategia"] = "Error Validación: Módulo 11 falló"
+        data["receptor"]["ruc_dni"]["score"] = 10
         
     # Formatear Montos a 2 decimales string (opcional para el Frontend)
     # Por ahora los dejamos como float, pero aplicamos la cuadratura matemática

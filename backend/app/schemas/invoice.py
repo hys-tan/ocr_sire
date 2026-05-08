@@ -5,6 +5,7 @@ class ConfidenceField(BaseModel):
     valor: Any
     confianza: str = Field(..., description="ALTA, MEDIA o BAJA")
     estrategia: str = Field(..., description="Estrategia usada para la extracción")
+    score: int = Field(default=0, ge=0, le=100, description="Score numérico de confianza 0-100")
 
 class ComprobanteBase(BaseModel):
     tipo: Optional[ConfidenceField] = Field(None, description="Factura Electrónica, Boleta, etc.")

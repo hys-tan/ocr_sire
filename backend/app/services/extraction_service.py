@@ -1,4 +1,5 @@
 import re
+import unicodedata
 import logging
 from typing import Dict, Any
 
@@ -10,17 +11,61 @@ logging.basicConfig(
 )
 logger = logging.getLogger("ExtractorSIRE")
 
+# Tabla de puntuaciones por estrategia (basada en las reglas del Plan V8)
+SCORE_POR_ESTRATEGIA: Dict[str, int] = {
+    # Regex exactas → 95-100
+    "Regex (11 dígitos, prefijo válido)": 96,
+    "Regex Serie-Número": 97,
+    "Keyword/Prefijo Serie": 95,
+    "Keyword": 95,
+    "Regex (Flex-Separators)": 94,
+    "Regex Keyword (USD)": 95,
+    # Heurísticas / keywords secundarias → 70-85
+    "Est. 2 - Keyword Inline 'DENOMINACIÓN'": 85,
+    "Est. 2 - Keyword Inline": 82,
+    "Est. 3 - Keyword Siguiente Línea": 78,
+    "Est. 1 - Proximidad RUC": 72,
+    "Est. 4 - Bloque Superior Mayúsculas": 70,
+    # Inferencia / cálculo derivado → 50-70
+    "Default Nacional": 65,
+    "Valor Max (Heurística)": 62,
+    "Cálculo desde Total (18%)": 58,
+    # Fallos → 0-30
+    "Default": 25,
+    "Fallback": 20,
+    "No detectado": 0,
+}
+
+def calcular_score(estrategia: str, confianza: str) -> int:
+    """Devuelve el score numérico (0-100) según la estrategia y nivel de confianza."""
+    # Intentar match exacto primero
+    if estrategia in SCORE_POR_ESTRATEGIA:
+        return SCORE_POR_ESTRATEGIA[estrategia]
+    # Fallback por nivel de confianza
+    if confianza == "ALTA":
+        return 88
+    if confianza == "MEDIA":
+        return 60
+    return 20
+
 def extract_ruc(text: str) -> list:
     """Extrae todos los RUCs válidos."""
+    estrategia = "Regex (11 dígitos, prefijo válido)"
     rucs = re.findall(r'\b(?:10|15|17|20)\d{9}\b', text)
-    return [{"valor": r, "confianza": "ALTA", "estrategia": "Regex (11 dígitos, prefijo válido)"} for r in rucs]
+    return [{
+        "valor": r,
+        "confianza": "ALTA",
+        "estrategia": estrategia,
+        "score": calcular_score(estrategia, "ALTA")
+    } for r in rucs]
 
 def extract_serie_numero(text: str) -> Dict[str, Any]:
     """Extrae la serie y número."""
     match = re.search(r'\b([FBE]\w{3})\s*-\s*(\d{1,8})\b', text, re.IGNORECASE)
     if match:
-        return {"valor": f"{match.group(1).upper()}-{match.group(2)}", "confianza": "ALTA", "estrategia": "Regex Serie-Número"}
-    return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado"}
+        estrategia = "Regex Serie-Número"
+        return {"valor": f"{match.group(1).upper()}-{match.group(2)}", "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
+    return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
 
 def extract_tipo_comprobante(text: str, serie_dict: dict) -> Dict[str, Any]:
     """Determina el tipo de comprobante."""
@@ -28,27 +73,31 @@ def extract_tipo_comprobante(text: str, serie_dict: dict) -> Dict[str, Any]:
     serie = serie_dict["valor"] if serie_dict else None
     
     if "FACTURA" in texto_upper or (serie and serie.startswith('F')):
-        return {"valor": "Factura Electrónica", "confianza": "ALTA", "estrategia": "Keyword/Prefijo Serie"}
+        estrategia = "Keyword/Prefijo Serie"
+        return {"valor": "Factura Electrónica", "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
     elif "BOLETA" in texto_upper or (serie and serie.startswith('B')):
-        return {"valor": "Boleta de Venta Electrónica", "confianza": "ALTA", "estrategia": "Keyword/Prefijo Serie"}
+        estrategia = "Keyword/Prefijo Serie"
+        return {"valor": "Boleta de Venta Electrónica", "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
     elif "NOTA DE CRÉDITO" in texto_upper or "NOTA DE CREDITO" in texto_upper:
-        return {"valor": "Nota de Crédito", "confianza": "ALTA", "estrategia": "Keyword"}
-    return {"valor": "Desconocido", "confianza": "BAJA", "estrategia": "Fallback"}
+        estrategia = "Keyword"
+        return {"valor": "Nota de Crédito", "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
+    return {"valor": "Desconocido", "confianza": "BAJA", "estrategia": "Fallback", "score": calcular_score("Fallback", "BAJA")}
 
 def extract_fecha(text: str) -> Dict[str, Any]:
     """Extrae y normaliza la fecha."""
     match = re.search(r'\b(\d{2})\s*[/.\-:]\s*(\d{2})\s*[/.\-:]\s*(\d{4})\b', text)
     if match:
         dia, mes, anio = match.groups()
-        return {"valor": f"{dia}/{mes}/{anio}", "confianza": "ALTA", "estrategia": "Regex (Flex-Separators)"}
-    return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado"}
+        estrategia = "Regex (Flex-Separators)"
+        return {"valor": f"{dia}/{mes}/{anio}", "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
+    return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
 
 def extract_montos(text: str) -> Dict[str, Any]:
     """Busca montos (Subtotal, IGV, Total) devolviendo dicts de confianza."""
     montos = {
-        "subtotal": {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default"},
-        "igv": {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default"},
-        "total": {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default"}
+        "subtotal": {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default", "score": calcular_score("Default", "BAJA")},
+        "igv":      {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default", "score": calcular_score("Default", "BAJA")},
+        "total":    {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default", "score": calcular_score("Default", "BAJA")}
     }
     
     cantidades = re.findall(r'\b\d{1,3}(?:,\d{3})*\.\d{2}\b', text)
@@ -65,22 +114,24 @@ def extract_montos(text: str) -> Dict[str, Any]:
             
     if valores:
         posible_total = max(valores)
-        montos["total"] = {"valor": posible_total, "confianza": "MEDIA", "estrategia": "Valor Max (Heurística)"}
+        est_total = "Valor Max (Heurística)"
+        montos["total"] = {"valor": posible_total, "confianza": "MEDIA", "estrategia": est_total, "score": calcular_score(est_total, "MEDIA")}
         
-        # Validacion_service se encargará de ajustar la confianza si la matemática no cuadra
         subtotal = round(posible_total / 1.18, 2)
         igv = round(posible_total - subtotal, 2)
-        
-        montos["subtotal"] = {"valor": subtotal, "confianza": "MEDIA", "estrategia": "Cálculo desde Total (18%)"}
-        montos["igv"] = {"valor": igv, "confianza": "MEDIA", "estrategia": "Cálculo desde Total (18%)"}
+        est_calc = "Cálculo desde Total (18%)"
+        montos["subtotal"] = {"valor": subtotal, "confianza": "MEDIA", "estrategia": est_calc, "score": calcular_score(est_calc, "MEDIA")}
+        montos["igv"]      = {"valor": igv,      "confianza": "MEDIA", "estrategia": est_calc, "score": calcular_score(est_calc, "MEDIA")}
         
     return montos
 
 def extract_moneda(text: str) -> Dict[str, Any]:
     """Detecta PEN o USD."""
     if re.search(r'\b(USD|DOLARES|\$)\b', text, re.IGNORECASE):
-        return {"valor": "USD", "confianza": "ALTA", "estrategia": "Regex Keyword (USD)"}
-    return {"valor": "PEN", "confianza": "MEDIA", "estrategia": "Default Nacional"}
+        estrategia = "Regex Keyword (USD)"
+        return {"valor": "USD", "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
+    estrategia = "Default Nacional"
+    return {"valor": "PEN", "confianza": "MEDIA", "estrategia": estrategia, "score": calcular_score(estrategia, "MEDIA")}
 
 def is_valid_razon_social(text: str) -> bool:
     """Aplica filtros negativos para descartar falsos positivos de Razón Social."""
@@ -101,80 +152,150 @@ def is_valid_razon_social(text: str) -> bool:
             
     return True
 
+def limpiar_razon_social(text: str) -> str:
+    """
+    Limpia el texto de una Razón Social eliminando:
+    - Números de RUC o DNI (10, 15, 17, 20 + 9 dígitos)
+    - Etiquetas residuales: 'R.U.C.', 'RUC:', 'DNI:', etc.
+    - Fragmentos de columnas OCR: 'MONEDA', 'FECHA', 'SOLES', etc.
+    - Espacios dobles y caracteres extraños al final
+    """
+    # 1. Eliminar etiquetas tipo "R.U.C." antes del número
+    text = re.sub(r'\bR\.?\s*U\.?\s*C\.?\s*[:\-]?\s*', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bDNI\s*[:\-]?\s*', '', text, flags=re.IGNORECASE)
+    
+    # 2. Eliminar números de RUC/DNI (secuencias de 8 o 11 dígitos)
+    text = re.sub(r'\b\d{11}\b', '', text)
+    text = re.sub(r'\b\d{8}\b', '', text)
+    
+    # 3. Eliminar "ruido de columna" OCR
+    cutoffs = ["MONEDA", "FECHA", "TOTAL", "SOLES", "DOLARES", "IMPORTE", "MONTO"]
+    for cutoff in cutoffs:
+        if cutoff in text.upper():
+            text = re.split(cutoff, text, flags=re.IGNORECASE)[0]
+    
+    # 4. Limpiar puntuación suelta al final y espacios dobles
+    text = re.sub(r'[\s\-\.,:;]+$', '', text.strip())
+    text = re.sub(r'\s{2,}', ' ', text)
+    
+    return text.strip()
+
+def normalizar_para_busqueda(texto: str) -> str:
+    """
+    Normaliza texto SOLO para hacer matching de keywords.
+    - Convierte a mayúsculas
+    - Elimina tildes vocales (AÉÍÓÚ → AEIOU) pero conserva la Ñ
+    - Limpia símbolos raros, conserva letras, números, espacios y Ñ
+    - Reduce múltiples espacios a uno
+    """
+    texto = texto.upper()
+    
+    # Descomponer caracteres Unicode (NFD) para separar letra + tilde
+    nfd = unicodedata.normalize('NFD', texto)
+    # Filtrar: conservar todo EXCEPTO las marcas de acento (Mn), pero reponer Ñ
+    resultado = []
+    for char in nfd:
+        # Ignorar marcas diacíriticas (tildes), pero solo si no es parte de Ñ
+        if unicodedata.category(char) == 'Mn':
+            continue
+        resultado.append(char)
+    texto = ''.join(resultado)
+    
+    # Limpiar símbolos dejando solo letras (incluyendo Ñ), números y espacios
+    texto = re.sub(r'[^A-Z0-9Ñ\s]', ' ', texto)
+    texto = re.sub(r'\s+', ' ', texto)
+    
+    return texto.strip()
+
+# Patrones flexibles para detectar keywords del receptor.
+# Usan \s* para absorber espacios OCR y variantes sin tilde.
+PATRONES_RECEPTOR = [
+    r'SE[NÑ]OR\s*(?:ES|A)?',          # SEÑORES, SENORES, SEÑOR, SENOR
+    r'RAZ[OÒ]N\s+SOCIAL',             # RAZÓN SOCIAL, RAZON SOCIAL
+    r'DENOMINACI[OÓ]N',              # DENOMINACIÓN, DENOMINACION
+    r'DENOMINACIN',                   # OCR corruption frecuente
+    r'ADQUIRENTE',
+    r'DESTINATARIO',
+    r'CLIENTE\s+FINAL',
+]
+
 def extract_razon_social_emisor(lines: list, ruc_line_idx: int) -> Dict[str, str]:
     """Busca la razón social del emisor usando múltiples estrategias."""
     if ruc_line_idx > 0:
-        # Estrategia 1: Proximidad al RUC (La línea de arriba)
-        posible_razon = lines[ruc_line_idx - 1].strip()
+        posible_razon = limpiar_razon_social(lines[ruc_line_idx - 1].strip())
         if is_valid_razon_social(posible_razon):
             logger.info(f"Emisor extraído [Est. 1 - Proximidad RUC]: {posible_razon}")
-            return {"valor": posible_razon, "confianza": "ALTA", "estrategia": "Proximidad RUC"}
+            estrategia = "Est. 1 - Proximidad RUC"
+            return {"valor": posible_razon, "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
             
     # Estrategia 3: Heurística de Mayúsculas al inicio del documento
     for line in lines[:6]:
-        line = line.strip()
+        line = limpiar_razon_social(line.strip())
         if line.isupper() and is_valid_razon_social(line):
             logger.info(f"Emisor extraído [Est. 3 - Mayúsculas]: {line}")
-            return {"valor": line, "confianza": "MEDIA", "estrategia": "Heurística Mayúsculas Encabezado"}
+            estrategia = "Est. 4 - Bloque Superior Mayúsculas"
+            return {"valor": line, "confianza": "MEDIA", "estrategia": estrategia, "score": calcular_score(estrategia, "MEDIA")}
             
     logger.warning("Fallback activado: No se pudo detectar Emisor seguro.")
-    return {"valor": "No detectado", "confianza": "BAJA", "estrategia": "Fallback"}
+    return {"valor": "No detectado", "confianza": "BAJA", "estrategia": "Fallback", "score": calcular_score("Fallback", "BAJA")}
 
 def extract_razon_social_receptor(lines: list, receptor_ruc: str = None) -> Dict[str, str]:
-    """Busca la razón social del receptor mediante keywords o proximidad al RUC."""
-    # Eliminamos 'CLIENTE' genérico porque suele chocar con 'DATOS DEL CLIENTE'
-    keywords = ["SEÑOR(ES)", "SEÑORES", "RAZÓN SOCIAL", "RAZON SOCIAL", "ADQUIRENTE", "DESTINATARIO", "CLIENTE FINAL", "DENOMINACION", "DENOMINACIÓN", "DENOMINACIN"]
-    
-    # Estrategia 2: Búsqueda por Keywords (diccionario extendido)
+    """Busca la razón social del receptor mediante patrones regex flexibles o proximidad al RUC."""
+
+    # Estrategia 2: Búsqueda por patrones keyword (con regex flexible y normalización)
     for i, line in enumerate(lines):
-        line_upper = line.upper()
-        # Ignorar si es solo un título de sección
-        if "DATOS DEL CLIENTE" in line_upper and ":" not in line_upper:
+        line_norm = normalizar_para_busqueda(line)  # Solo para matching
+
+        # Ignorar títulos de sección genéricos
+        if re.search(r'DATOS\s+DEL\s+CLIENTE', line_norm) and ':' not in line_norm:
             continue
-            
-        for kw in keywords:
-            if kw in line_upper:
-                # Extraer texto después de los dos puntos o caracteres especiales
-                match = re.search(rf'{kw}[^\w:]*:[^\w]*([A-Z0-9\s.&-]+)', line_upper)
-                if not match:
-                    # Intento más relajado si no hay dos puntos
-                    match = re.search(rf'{kw}[^\w]*([A-Z0-9\s.&-]+)', line_upper)
-                    
-                if match:
-                    posible_razon = match.group(1).strip()
-                    
-                    # Limpieza agresiva: si el OCR juntó dos columnas
-                    for cutoff in [" MONEDA", " FECHA", " RUC", " DNI"]:
-                        if cutoff in posible_razon:
-                            posible_razon = posible_razon.split(cutoff)[0].strip()
-                            
-                    if is_valid_razon_social(posible_razon):
-                        logger.info(f"Receptor extraído [Est. 2 - Keyword Inline '{kw}']: {posible_razon}")
-                        return {"valor": posible_razon, "confianza": "ALTA", "estrategia": f"Keyword Inline ({kw})"}
-                        
-                # Si no está en la misma línea, intentar la siguiente línea
-                elif i + 1 < len(lines):
-                    posible_razon = lines[i + 1].strip()
-                    if is_valid_razon_social(posible_razon):
-                        logger.info(f"Receptor extraído [Est. 2 - Keyword Próxima Línea '{kw}']: {posible_razon}")
-                        return {"valor": posible_razon, "confianza": "MEDIA", "estrategia": f"Keyword Próxima Línea ({kw})"}
-                        
+
+        for patron in PATRONES_RECEPTOR:
+            if not re.search(patron, line_norm):
+                continue
+
+            # Intento 1: inline con dos puntos  —  KEY : VALOR
+            match = re.search(rf'(?:{patron})[^\wÑ:]*:[^\wÑ]*([A-Z0-9Ñ\s.&-]+)', line_norm)
+            if not match:
+                # Intento 2: inline sin dos puntos  —  KEY VALOR
+                match = re.search(rf'(?:{patron})[^\wÑ]*([A-Z0-9Ñ\s.&-]+)', line_norm)
+
+            if match:
+                posible_razon = limpiar_razon_social(match.group(1).strip())
+
+                # Cortar si el OCR unió columnas
+                for cutoff in [' MONEDA', ' FECHA', ' RUC', ' DNI']:
+                    if cutoff in posible_razon:
+                        posible_razon = posible_razon.split(cutoff)[0].strip()
+
+                if is_valid_razon_social(posible_razon):
+                    logger.info(f"Receptor extraído [Est. 2 - Keyword Inline '{patron}']: {posible_razon}")
+                    estrategia = "Est. 2 - Keyword Inline"
+                    return {"valor": posible_razon, "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
+
+            # Intento 3: el valor está en la siguiente línea
+            if i + 1 < len(lines):
+                posible_razon = limpiar_razon_social(lines[i + 1].strip())
+                if is_valid_razon_social(posible_razon):
+                    logger.info(f"Receptor extraído [Est. 3 - Keyword siguiente línea '{patron}']: {posible_razon}")
+                    estrategia = "Est. 3 - Keyword Siguiente Línea"
+                    return {"valor": posible_razon, "confianza": "MEDIA", "estrategia": estrategia, "score": calcular_score(estrategia, "MEDIA")}
+
     # Estrategia 4: Proximidad al RUC del Receptor
     if receptor_ruc:
         for i, line in enumerate(lines):
             if receptor_ruc in line:
-                # Revisar 2 líneas hacia arriba y 2 líneas hacia abajo
                 candidatos_idx = [i-1, i-2, i+1, i+2]
                 for idx in candidatos_idx:
                     if 0 <= idx < len(lines):
-                        posible_razon = lines[idx].strip()
-                        # Si es válida y no tiene palabras clave de otros campos
+                        posible_razon = limpiar_razon_social(lines[idx].strip())
                         if is_valid_razon_social(posible_razon) and not any(k in posible_razon.upper() for k in ["RUC", "FECHA", "MONEDA", "SOLES", "DOLARES", "TOTAL"]):
                             logger.info(f"Receptor extraído [Est. 4 - Proximidad RUC Receptor]: {posible_razon}")
-                            return {"valor": posible_razon, "confianza": "MEDIA", "estrategia": "Proximidad RUC Receptor"}
-                            
+                            estrategia = "Est. 1 - Proximidad RUC"
+                            return {"valor": posible_razon, "confianza": "MEDIA", "estrategia": estrategia, "score": calcular_score(estrategia, "MEDIA")}
+
     logger.warning("Fallback activado: No se pudo detectar Receptor seguro.")
-    return {"valor": "No detectado", "confianza": "BAJA", "estrategia": "Fallback"}
+    return {"valor": "No detectado", "confianza": "BAJA", "estrategia": "Fallback", "score": calcular_score("Fallback", "BAJA")}
 
 def parse_invoice(raw_text: str) -> Dict[str, Any]:
     """
@@ -191,8 +312,8 @@ def parse_invoice(raw_text: str) -> Dict[str, Any]:
     
     # RUCs
     rucs = extract_ruc(cleaned_text)
-    emisor_ruc_dict = rucs[0] if len(rucs) > 0 else {"valor": None, "confianza": "BAJA", "estrategia": "No detectado"}
-    receptor_ruc_dict = rucs[1] if len(rucs) > 1 else {"valor": None, "confianza": "BAJA", "estrategia": "No detectado"}
+    emisor_ruc_dict = rucs[0] if len(rucs) > 0 else {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
+    receptor_ruc_dict = rucs[1] if len(rucs) > 1 else {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
     
     # Razones Sociales (Fallback System)
     emisor_ruc_idx = -1
