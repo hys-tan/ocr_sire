@@ -18,7 +18,8 @@ def _calcular_metricas(data: dict, elapsed: float) -> dict:
     # Todos los posibles campos ConfidenceField del modelo
     campos_flat = [
         data.get("comprobante", {}).get("tipo"),
-        data.get("comprobante", {}).get("serie_numero"),
+        data.get("comprobante", {}).get("serie"),
+        data.get("comprobante", {}).get("numero"),
         data.get("comprobante", {}).get("fecha_emision"),
         data.get("comprobante", {}).get("moneda"),
         data.get("emisor", {}).get("ruc"),

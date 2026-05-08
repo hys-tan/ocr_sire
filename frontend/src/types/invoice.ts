@@ -9,7 +9,8 @@ export interface ConfidenceField<T = string | number | null> {
 
 export interface Comprobante {
   tipo: ConfidenceField<string | null>;
-  serie_numero: ConfidenceField<string | null>;
+  serie: ConfidenceField<string | null>;
+  numero: ConfidenceField<string | null>;
   fecha_emision: ConfidenceField<string | null>;
   moneda: ConfidenceField<string | null>;
 }

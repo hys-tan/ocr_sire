@@ -9,7 +9,8 @@ class ConfidenceField(BaseModel):
 
 class ComprobanteBase(BaseModel):
     tipo: Optional[ConfidenceField] = Field(None, description="Factura Electrónica, Boleta, etc.")
-    serie_numero: Optional[ConfidenceField] = Field(None, description="Ej: F001-0083104")
+    serie: Optional[ConfidenceField] = Field(None, description="Ej: F001")
+    numero: Optional[ConfidenceField] = Field(None, description="Ej: 0083104")
     fecha_emision: Optional[ConfidenceField] = Field(None, description="DD/MM/YYYY")
     moneda: Optional[ConfidenceField] = Field(None, description="PEN o USD")
 
@@ -30,7 +31,7 @@ class MetricasOCR(BaseModel):
     """Métricas automáticas generadas por el pipeline de extracción."""
     tiempo_procesamiento: float = Field(..., description="Segundos totales del pipeline")
     campos_detectados: int = Field(..., description="Campos con valor no nulo")
-    total_campos: int = Field(default=11, description="Total de campos del modelo")
+    total_campos: int = Field(default=12, description="Total de campos del modelo")
     score_promedio: int = Field(..., description="Promedio de scores de todos los campos (0-100)")
 
 class InvoiceResponse(BaseModel):

@@ -193,7 +193,8 @@ const EditableFieldRow = ({ label, field, fieldKey, editedValues, onEdit, onClea
 function calcularScoreGlobal(data: InvoiceResponse): number {
   const campos = [
     data.comprobante.tipo,
-    data.comprobante.serie_numero,
+    data.comprobante.serie,
+    data.comprobante.numero,
     data.comprobante.fecha_emision,
     data.comprobante.moneda,
     data.emisor.ruc,
@@ -266,7 +267,8 @@ export default function InvoiceResults({ data }: InvoiceResultsProps) {
           </h3>
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
             <EditableFieldRow label="Tipo"         field={data.comprobante.tipo}         fieldKey="comprobante.tipo"         {...rowProps} />
-            <EditableFieldRow label="Serie/Número" field={data.comprobante.serie_numero} fieldKey="comprobante.serie_numero" {...rowProps} />
+            <EditableFieldRow label="Serie"         field={data.comprobante.serie}        fieldKey="comprobante.serie"        {...rowProps} />
+            <EditableFieldRow label="Número"        field={data.comprobante.numero}       fieldKey="comprobante.numero"       {...rowProps} />
             <EditableFieldRow label="Fecha Emisión"field={data.comprobante.fecha_emision}fieldKey="comprobante.fecha_emision"{...rowProps} />
             <EditableFieldRow label="Moneda"       field={data.comprobante.moneda}       fieldKey="comprobante.moneda"       {...rowProps} />
           </div>

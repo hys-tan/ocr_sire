@@ -60,11 +60,27 @@ def extract_ruc(text: str) -> list:
     } for r in rucs]
 
 def extract_serie_numero(text: str) -> Dict[str, Any]:
-    """Extrae la serie y número."""
+    """Extrae la serie y número combinados (mantenido para compatibilidad con extract_tipo_comprobante)."""
     match = re.search(r'\b([FBE]\w{3})\s*-\s*(\d{1,8})\b', text, re.IGNORECASE)
     if match:
         estrategia = "Regex Serie-Número"
         return {"valor": f"{match.group(1).upper()}-{match.group(2)}", "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
+    return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
+
+def extract_serie(text: str) -> Dict[str, Any]:
+    """Extrae SOLO la serie del comprobante (ej: F001, B002)."""
+    match = re.search(r'\b([FBE]\w{3})\s*-\s*\d{1,8}\b', text, re.IGNORECASE)
+    if match:
+        estrategia = "Regex Serie-Número"
+        return {"valor": match.group(1).upper(), "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
+    return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
+
+def extract_numero(text: str) -> Dict[str, Any]:
+    """Extrae SOLO el número correlativo del comprobante (ej: 0083104)."""
+    match = re.search(r'\b[FBE]\w{3}\s*-\s*(\d{1,8})\b', text, re.IGNORECASE)
+    if match:
+        estrategia = "Regex Serie-Número"
+        return {"valor": match.group(1), "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
     return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
 
 def extract_tipo_comprobante(text: str, serie_dict: dict) -> Dict[str, Any]:
@@ -328,8 +344,10 @@ def parse_invoice(raw_text: str) -> Dict[str, Any]:
     receptor_razon = extract_razon_social_receptor(lines, receptor_ruc_dict["valor"])
     
     # Serie, Número y Tipo
-    serie_numero = extract_serie_numero(cleaned_text)
+    serie_numero = extract_serie_numero(cleaned_text)  # Para inferir tipo
     tipo_comprobante = extract_tipo_comprobante(cleaned_text, serie_numero)
+    serie = extract_serie(cleaned_text)
+    numero = extract_numero(cleaned_text)
     
     # Fechas y Moneda
     fecha = extract_fecha(cleaned_text)
@@ -344,7 +362,8 @@ def parse_invoice(raw_text: str) -> Dict[str, Any]:
     return {
         "comprobante": {
             "tipo": tipo_comprobante,
-            "serie_numero": serie_numero,
+            "serie": serie,
+            "numero": numero,
             "fecha_emision": fecha,
             "moneda": moneda
         },
