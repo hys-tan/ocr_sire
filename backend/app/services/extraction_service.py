@@ -2,6 +2,7 @@ import re
 import unicodedata
 import logging
 from typing import Dict, Any
+from app.services.normalization_service import aplicar_normalizacion
 
 # Configurar Logging para auditar estrategias y facilitar debugging
 logging.basicConfig(
@@ -357,7 +358,21 @@ def parse_invoice(raw_text: str) -> Dict[str, Any]:
     montos = extract_montos(cleaned_text)
     
     logger.info("=== Pipeline de Extracción Finalizado ===")
-    
+
+    # ── Normalización inteligente post-extracción ─────────────────────────────
+    # Se añade 'valor_normalizado' a cada campo si difiere del original.
+    # El valor original OCR siempre se preserva para trazabilidad.
+    emisor_ruc_dict  = aplicar_normalizacion('emisor_ruc',              emisor_ruc_dict)
+    emisor_razon     = aplicar_normalizacion('emisor_razon_social',     emisor_razon)
+    receptor_ruc_dict= aplicar_normalizacion('receptor_ruc_dni',       receptor_ruc_dict)
+    receptor_razon   = aplicar_normalizacion('receptor_razon_social',   receptor_razon)
+    fecha            = aplicar_normalizacion('fecha_emision',           fecha)
+    montos["subtotal"]= aplicar_normalizacion('subtotal',              montos["subtotal"])
+    montos["igv"]     = aplicar_normalizacion('igv',                   montos["igv"])
+    montos["total"]   = aplicar_normalizacion('total',                 montos["total"])
+
+    logger.info("=== Normalización Aplicada ===")
+
     # Estructura de Salida (Todo envuelto en diccionarios de Confianza)
     return {
         "comprobante": {

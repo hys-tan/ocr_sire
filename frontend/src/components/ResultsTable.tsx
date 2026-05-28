@@ -1,6 +1,7 @@
-import { CheckCircle2, AlertTriangle, XCircle, Eye, FileText, BarChart2, Clock } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, Eye, FileText, BarChart2, Clock, Download, FileSpreadsheet } from 'lucide-react';
 import type { BatchFile } from '../types/batch';
 import { formatMB } from '../types/batch';
+import { exportToExcel, exportToCSV, exportToTXT } from '../services/export.service';
 
 interface ResultsTableProps {
   files: BatchFile[];
@@ -62,16 +63,50 @@ export default function ResultsTable({ files, onSelectFile }: ResultsTableProps)
           <FileText size={20} />
           <h2 className="text-lg font-semibold">Resultados del Lote</h2>
         </div>
-        <div className="flex items-center space-x-4 text-sm">
-          <span className="flex items-center space-x-1 text-purple-200">
+        <div className="flex items-center space-x-3">
+          {/* Métricas inline */}
+          <span className="flex items-center space-x-1 text-purple-200 text-sm">
             <CheckCircle2 size={14} className="text-green-300" />
             <span>{done.length} procesados</span>
           </span>
           {errCount > 0 && (
-            <span className="flex items-center space-x-1 text-purple-200">
+            <span className="flex items-center space-x-1 text-purple-200 text-sm">
               <XCircle size={14} className="text-red-300" />
               <span>{errCount} errores</span>
             </span>
+          )}
+
+          {/* Separador */}
+          {done.length > 0 && <span className="text-purple-400">|</span>}
+
+          {/* Botones de exportación — solo si hay resultados */}
+          {done.length > 0 && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => exportToExcel(files)}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-white text-purple-700 rounded-lg text-xs font-semibold hover:bg-purple-50 transition-colors shadow-sm"
+                title="Descargar resultados en Excel"
+              >
+                <FileSpreadsheet size={14} />
+                <span>Excel</span>
+              </button>
+              <button
+                onClick={() => exportToCSV(files)}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-purple-500 text-white rounded-lg text-xs font-semibold hover:bg-purple-400 transition-colors border border-purple-400"
+                title="Descargar resultados en CSV"
+              >
+                <Download size={14} />
+                <span>CSV</span>
+              </button>
+              <button
+                onClick={() => exportToTXT(files)}
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-purple-500 text-white rounded-lg text-xs font-semibold hover:bg-purple-400 transition-colors border border-purple-400"
+                title="Descargar reporte en texto plano"
+              >
+                <FileText size={14} />
+                <span>TXT</span>
+              </button>
+            </div>
           )}
         </div>
       </div>

@@ -4,6 +4,8 @@ import { CheckCircle2, AlertTriangle, XCircle, FileText, User, Building, Calcula
 
 interface InvoiceResultsProps {
   data: InvoiceResponse;
+  editedValues: Record<string, string>;
+  onEditChange: (edits: Record<string, string>) => void;
 }
 
 // ─── Badge de Confianza ───────────────────────────────────────────────────────
@@ -52,6 +54,29 @@ const formatValue = (valor: any): string => {
   return String(valor);
 };
 
+/**
+ * Devuelve el valor a mostrar en la UI:
+ * - Si existe valor_normalizado → lo usa (es más limpio que el OCR crudo)
+ * - Si no → usa el valor original
+ */
+const getDisplayValue = (field: ConfidenceField<any> | undefined | null): string => {
+  if (!field) return 'No detectado';
+  const base = field.valor_normalizado !== undefined && field.valor_normalizado !== null
+    ? field.valor_normalizado
+    : field.valor;
+  return formatValue(base);
+};
+
+/**
+ * Devuelve true si el backend normalizó este campo (existe valor_normalizado y difiere del original).
+ */
+const isNormalized = (field: ConfidenceField<any> | undefined | null): boolean => {
+  if (!field) return false;
+  return field.valor_normalizado !== undefined &&
+    field.valor_normalizado !== null &&
+    String(field.valor_normalizado) !== String(field.valor);
+};
+
 // ─── Fila Editable ────────────────────────────────────────────────────────────
 
 interface EditableFieldRowProps {
@@ -68,9 +93,11 @@ const EditableFieldRow = ({ label, field, fieldKey, editedValues, onEdit, onClea
   const [tempValue, setTempValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const isOverridden = fieldKey in editedValues;
-  const originalDisplay = formatValue(field?.valor);
-  const displayValue = isOverridden ? editedValues[fieldKey] : originalDisplay;
+  const isOverridden  = fieldKey in editedValues;
+  const normalized    = isNormalized(field);
+  // Prioridad de display: edición manual > normalizado > original
+  const originalDisplay = getDisplayValue(field);
+  const displayValue    = isOverridden ? editedValues[fieldKey] : originalDisplay;
 
   // Clases de borde según confianza (solo cuando no está editado manualmente)
   const isBaja = !isOverridden && field?.confianza === "BAJA";
@@ -174,11 +201,22 @@ const EditableFieldRow = ({ label, field, fieldKey, editedValues, onEdit, onClea
               </button>
             )}
 
-            {/* Badge de confianza */}
-            <div className="cursor-help flex-shrink-0">
+            {/* Badge de confianza o normalización */}
+            <div className="cursor-help flex-shrink-0 flex items-center space-x-1">
               {isOverridden
                 ? <ManualBadge />
-                : <ConfidenceBadge level={field.confianza} tooltip={field.estrategia} score={field.score} />
+                : <>
+                    {normalized && !isOverridden && (
+                      <span
+                        title={`OCR original: "${field?.valor}" → Normalizado automáticamente`}
+                        className="flex items-center space-x-0.5"
+                      >
+                        <span className="text-xs font-bold text-orange-500">✦</span>
+                        <span className="text-xs font-semibold text-orange-500">Norm.</span>
+                      </span>
+                    )}
+                    <ConfidenceBadge level={field.confianza} tooltip={field.estrategia} score={field.score} />
+                  </>
               }
             </div>
           </>
@@ -213,18 +251,15 @@ function calcularScoreGlobal(data: InvoiceResponse): number {
 
 // ─── Componente Principal ─────────────────────────────────────────────────────
 
-export default function InvoiceResults({ data }: InvoiceResultsProps) {
-  const [editedValues, setEditedValues] = useState<Record<string, string>>({});
+export default function InvoiceResults({ data, editedValues, onEditChange }: InvoiceResultsProps) {
 
   const handleEdit = (key: string, value: string) => {
-    setEditedValues(prev => ({ ...prev, [key]: value }));
+    onEditChange({ ...editedValues, [key]: value });
   };
   const handleClear = (key: string) => {
-    setEditedValues(prev => {
-      const copy = { ...prev };
-      delete copy[key];
-      return copy;
-    });
+    const copy = { ...editedValues };
+    delete copy[key];
+    onEditChange(copy);
   };
 
   const totalEditados = Object.keys(editedValues).length;

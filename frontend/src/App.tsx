@@ -31,6 +31,7 @@ type BatchAction =
   | { type: 'SET_STATUS';  id: string; status: BatchFile['status'] }
   | { type: 'SET_RESULT';  id: string; result: InvoiceResponse }
   | { type: 'SET_ERROR';   id: string; error: string }
+  | { type: 'UPDATE_FILE_EDITS'; id: string; edits: Record<string, string> }
   | { type: 'SET_ACTIVE';  index: number | null }
   | { type: 'START_PROCESSING' }
   | { type: 'STOP_PROCESSING' }
@@ -69,6 +70,14 @@ function batchReducer(state: BatchState, action: BatchAction): BatchState {
         ),
       };
 
+    case 'UPDATE_FILE_EDITS':
+      return {
+        ...state,
+        files: state.files.map(f =>
+          f.id === action.id ? { ...f, editedValues: action.edits } : f
+        ),
+      };
+
     case 'SET_ACTIVE':
       return { ...state, activeIndex: action.index };
 
@@ -94,6 +103,11 @@ function batchReducer(state: BatchState, action: BatchAction): BatchState {
 export default function App() {
   const [state, dispatch] = useReducer(batchReducer, INITIAL_STATE);
   const { files, activeIndex, isProcessing, globalError } = state;
+
+  // Confirmación antes de resetear el lote
+  const [showResetConfirm, setShowResetConfirm] = useReducer(
+    (_: boolean, next: boolean) => next, false
+  );
 
   // Archivo y resultado activos para la vista dual
   const activeFile   = activeIndex !== null ? files[activeIndex] ?? null : null;
@@ -136,6 +150,9 @@ export default function App() {
   }, []);
 
   const handleReset = () => dispatch({ type: 'RESET' });
+  const requestReset = () => setShowResetConfirm(true);
+  const confirmReset = () => { setShowResetConfirm(false); dispatch({ type: 'RESET' }); };
+  const cancelReset  = () => setShowResetConfirm(false);
 
   // ─── Vista ──────────────────────────────────────────────────────────────────
 
@@ -154,7 +171,7 @@ export default function App() {
 
           {hasResults && (
             <button
-              onClick={handleReset}
+              onClick={requestReset}
               className="absolute right-0 top-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition-colors"
             >
               Procesar nuevo lote
@@ -187,6 +204,7 @@ export default function App() {
             activeIndex={activeIndex}
             onBack={() => dispatch({ type: 'SET_ACTIVE', index: null })}
             onNavigate={idx => dispatch({ type: 'SET_ACTIVE', index: idx })}
+            onFileEdit={(id, edits) => dispatch({ type: 'UPDATE_FILE_EDITS', id, edits })}
           />
         )}
 
@@ -194,6 +212,40 @@ export default function App() {
 
       {/* Cola visual de procesamiento */}
       <ProcessingQueue files={files} isVisible={isProcessing} />
+
+      {/* ── Modal de confirmación de reset ──────────────────────────────────── */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-7 max-w-sm w-full mx-4 animate-in">
+            <div className="text-center">
+              <div className="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-2xl">⚠️</span>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">¿Procesar un nuevo lote?</h3>
+              <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+                Se perderán los resultados actuales del lote
+                ({files.filter(f => f.status === 'completado' || f.status === 'revision').length} documentos procesados).
+                <br/>
+                <span className="font-medium text-gray-700">Asegúrate de haber exportado los datos antes de continuar.</span>
+              </p>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={cancelReset}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmReset}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-semibold text-sm hover:bg-red-600 transition-colors"
+              >
+                Sí, descartar lote
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

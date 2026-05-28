@@ -9,6 +9,7 @@ interface InvoiceViewerProps {
   activeIndex: number;
   onBack: () => void;
   onNavigate: (index: number) => void;
+  onFileEdit: (id: string, edits: Record<string, string>) => void;
 }
 
 // ─── Badge de estado inline ───────────────────────────────────────────────────
@@ -32,9 +33,10 @@ const StatusChip = ({ status }: { status: BatchFile['status'] }) => {
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export default function InvoiceViewer({ files, activeIndex, onBack, onNavigate }: InvoiceViewerProps) {
+export default function InvoiceViewer({ files, activeIndex, onBack, onNavigate, onFileEdit }: InvoiceViewerProps) {
   const activeFile   = files[activeIndex];
   const activeResult = activeFile?.result ?? null;
+  const editedValues = activeFile?.editedValues ?? {};
 
   const hasPrev = activeIndex > 0;
   const hasNext = activeIndex < files.length - 1;
@@ -51,13 +53,16 @@ export default function InvoiceViewer({ files, activeIndex, onBack, onNavigate }
       {/* ── Barra de navegación superior ──────────────────────────────────── */}
       <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3">
 
-        {/* Volver */}
+        {/* Volver — botón prominente con contexto */}
         <button
           onClick={onBack}
-          className="flex items-center space-x-1.5 text-sm text-purple-600 hover:text-purple-800 font-medium transition-colors group"
+          className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-xl font-semibold text-sm hover:bg-purple-700 transition-colors shadow-sm group"
         >
           <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
-          <span>Volver al lote</span>
+          <div className="flex flex-col items-start leading-none">
+            <span>Volver al lote</span>
+            <span className="text-purple-200 text-xs font-normal mt-0.5">Exportar Excel / CSV / TXT</span>
+          </div>
         </button>
 
         {/* Info del documento activo */}
@@ -131,7 +136,11 @@ export default function InvoiceViewer({ files, activeIndex, onBack, onNavigate }
 
           {/* Derecha: Datos OCR + Métricas */}
           <div className="w-full lg:w-1/2 flex flex-col gap-4">
-            <InvoiceResults data={activeResult} />
+            <InvoiceResults
+              data={activeResult}
+              editedValues={editedValues}
+              onEditChange={(edits) => onFileEdit(activeFile.id, edits)}
+            />
             <OCRMetrics metricas={activeResult.metricas} />
           </div>
         </div>

@@ -5,6 +5,8 @@ export interface ConfidenceField<T = string | number | null> {
   confianza: ConfianzaNivel;
   estrategia: string;
   score: number;
+  /** Valor post-procesado por el backend si difiere del OCR original */
+  valor_normalizado?: T;
 }
 
 export interface Comprobante {

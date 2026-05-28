@@ -20,6 +20,8 @@ export interface BatchFile {
   validationError?: string;
   /** Resultado de la extracción OCR (disponible cuando status = "completado" | "revision") */
   result?: import('./invoice').InvoiceResponse;
+  /** Correcciones manuales aplicadas por el usuario (clave: ruta del campo, valor: texto corregido) */
+  editedValues?: Record<string, string>;
   /** Mensaje de error legible (disponible cuando status = "error") */
   error?: string;
 }
