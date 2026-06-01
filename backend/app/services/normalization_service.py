@@ -1,134 +1,15 @@
 """
 Servicio de Normalización Inteligente de Datos OCR
 ====================================================
-Normaliza textos extraídos por OCR sin destruir el valor original.
-Específicamente orientado a las reglas ortográficas del SUNAT (Perú).
-
-Principio: NO alterar agresivamente. Solo corregir patrones conocidos
-           que el OCR fragmenta de forma predecible y recurrente.
+Orquesta la aplicación de reglas del core sobre el JSON extraído.
 """
 
-import re
-
-# ─── Tipos de Persona Jurídica ─────────────────────────────────────────────────
-# El OCR suele fragmentar las siglas porque las lee como palabras separadas.
-# Se define como (patrón_regex_flexible, reemplazo_correcto).
-
-_SIGLAS_JURIDICAS = [
-    # Sociedades más comunes en Perú
-    (r'\bS\s*\.?\s*A\s*\.?\s*C\s*\.?\b',       'S.A.C.'),   # Sociedad Anónima Cerrada
-    (r'\bS\s*\.?\s*A\s*\.?\b',                  'S.A.'),     # Sociedad Anónima
-    (r'\bE\s*\.?\s*I\s*\.?\s*R\s*\.?\s*L\s*\.?\b', 'E.I.R.L.'),  # Empresa Individual de Resp. Limitada
-    (r'\bS\s*\.?\s*R\s*\.?\s*L\s*\.?\b',       'S.R.L.'),   # Sociedad de Responsabilidad Limitada
-    (r'\bS\s*\.?\s*A\s*\.?\s*A\s*\.?\b',       'S.A.A.'),   # Sociedad Anónima Abierta
-    (r'\bS\s*\.?\s*C\s*\.?\s*R\s*\.?\s*L\s*\.?\b', 'S.C.R.L.'),  # Soc. Comercial de Resp. Limitada
-    # Variantes sin separación de espacios (lectura OCR compacta)
-    (r'\bSAC\b',    'S.A.C.'),
-    (r'\bEIRL\b',   'E.I.R.L.'),
-    (r'\bSRL\b',    'S.R.L.'),
-    (r'\bSAA\b',    'S.A.A.'),
-    (r'\bSCRL\b',   'S.C.R.L.'),
-]
-
-# ─── Abreviaciones de dirección comunes (limpieza posterior) ───────────────────
-_ABREV_DIRECCION = [
-    (r'\bAv\s*\.?\s+', 'Av. '),
-    (r'\bJr\s*\.?\s+', 'Jr. '),
-    (r'\bCa\s*\.?\s+', 'Ca. '),    # Calle abreviada
-    (r'\bUrb\s*\.?\s+', 'Urb. '),
-]
-
-
-def normalizar_siglas_juridicas(texto: str) -> str:
-    """
-    Corrige siglas de tipo jurídico que el OCR fragmenta con espacios.
-
-    Ejemplos:
-      "S A C"       → "S.A.C."
-      "E I R L"     → "E.I.R.L."
-      "SAC"         → "S.A.C."
-      "S.A.C"       → "S.A.C."   (punto final faltante)
-
-    El reemplazo es case-insensitive pero preserva el formato correcto
-    en mayúsculas (que es la convención del SUNAT).
-    """
-    if not texto:
-        return texto
-
-    for patron, reemplazo in _SIGLAS_JURIDICAS:
-        texto = re.sub(patron, reemplazo, texto, flags=re.IGNORECASE)
-
-    return texto
-
-
-def normalizar_razon_social(texto: str) -> str:
-    """
-    Normalización completa para una Razón Social:
-    1. Corrige siglas jurídicas fragmentadas.
-    2. Elimina espacios dobles residuales.
-    3. Convierte a Title Case solo si está en mayúsculas puras
-       (el OCR suele devolver TODO EN MAYÚSCULAS).
-
-    El texto original nunca se sobreescribe — esta función solo
-    retorna el valor normalizado para mostrarlo al usuario.
-    """
-    if not texto or texto == 'No detectado':
-        return texto
-
-    resultado = normalizar_siglas_juridicas(texto)
-
-    # Eliminar espacios dobles que puedan quedar tras el reemplazo
-    resultado = re.sub(r'\s{2,}', ' ', resultado).strip()
-
-    # Title Case solo si viene completamente en mayúsculas
-    # (evitar transformar textos que ya tienen capitalización correcta)
-    if resultado == resultado.upper() and len(resultado) > 1:
-        # Preservar siglas jurídicas que ya están correctas
-        palabras = resultado.split()
-        resultado_tc = []
-        siglas_finales = {'S.A.C.', 'S.A.', 'E.I.R.L.', 'S.R.L.', 'S.A.A.', 'S.C.R.L.', 'SAC', 'SA'}
-        for palabra in palabras:
-            if palabra in siglas_finales or re.match(r'^[A-Z]\.([A-Z]\.)+$', palabra):
-                resultado_tc.append(palabra)  # sigla → dejar en mayúsculas
-            else:
-                resultado_tc.append(palabra.capitalize())
-        resultado = ' '.join(resultado_tc)
-
-    return resultado
-
-
-def normalizar_ruc(texto: str) -> str:
-    """
-    Limpia un RUC de caracteres extraños que el OCR puede introducir.
-    Solo conserva dígitos.
-    """
-    if not texto:
-        return texto
-    return re.sub(r'\D', '', texto)
-
-
-def normalizar_fecha(texto: str) -> str:
-    """
-    Estandariza fechas al formato DD/MM/YYYY.
-    Acepta separadores: . - / o espacios.
-    """
-    if not texto:
-        return texto
-    match = re.match(r'^(\d{2})\s*[\/\.\-]\s*(\d{2})\s*[\/\.\-]\s*(\d{4})$', texto.strip())
-    if match:
-        d, m, y = match.groups()
-        return f'{d}/{m}/{y}'
-    return texto
-
-
-def normalizar_monto(valor: float) -> float:
-    """
-    Redondea a 2 decimales para evitar artefactos de punto flotante.
-    """
-    if valor is None:
-        return valor
-    return round(valor, 2)
-
+from app.core.normalization_rules import (
+    normalizar_razon_social,
+    normalizar_ruc,
+    normalizar_fecha,
+    normalizar_monto
+)
 
 def aplicar_normalizacion(campo: str, field_dict: dict) -> dict:
     """
@@ -154,6 +35,8 @@ def aplicar_normalizacion(campo: str, field_dict: dict) -> dict:
         valor_normalizado = normalizar_fecha(str(valor_original))
 
     elif campo in ('subtotal', 'igv', 'total'):
+        # Para montos, los dejamos como vienen, pero en el futuro podríamos 
+        # usar la corrección contextual numérica si vienen en formato texto.
         valor_normalizado = normalizar_monto(valor_original)
 
     # Solo añadir si realmente difiere del original

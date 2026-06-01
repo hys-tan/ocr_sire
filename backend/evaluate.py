@@ -36,15 +36,30 @@ def run_evaluation():
     datos_finales = clean_extracted_data(datos_extraidos) # FASE 3 y 5: Validación
     
     # Aplanar diccionario extraído para comparar extrayendo solo el "valor"
+    # Usar helper central para construir 'serie_numero' con padding (tolerante)
+    from app.core.comprobante_utils import get_serie_numero
+
+    def _get_val(field):
+        if field is None:
+            return None
+        if isinstance(field, dict):
+            return field.get("valor")
+        return field
+
+    # Construir serie_numero sin padding: conservar exactamente el valor extraído
+    serie_field = datos_finales["comprobante"].get("serie")
+    numero_field = datos_finales["comprobante"].get("numero")
+    serie_numero_val = get_serie_numero(serie_field, numero_field)
+
     extracted_flat = {
-        "comprobante.tipo": datos_finales["comprobante"]["tipo"]["valor"],
-        "comprobante.serie_numero": datos_finales["comprobante"]["serie_numero"]["valor"],
-        "comprobante.fecha_emision": datos_finales["comprobante"]["fecha_emision"]["valor"],
-        "emisor.ruc": datos_finales["emisor"]["ruc"]["valor"],
-        "emisor.razon_social": datos_finales["emisor"]["razon_social"]["valor"] if isinstance(datos_finales["emisor"]["razon_social"], dict) else datos_finales["emisor"]["razon_social"],
-        "receptor.ruc_dni": datos_finales["receptor"]["ruc_dni"]["valor"],
-        "receptor.razon_social": datos_finales["receptor"]["razon_social"]["valor"] if isinstance(datos_finales["receptor"]["razon_social"], dict) else datos_finales["receptor"]["razon_social"],
-        "montos.total": datos_finales["montos"]["total"]["valor"],
+        "comprobante.tipo": _get_val(datos_finales["comprobante"].get("tipo")),
+        "comprobante.serie_numero": serie_numero_val,
+        "comprobante.fecha_emision": _get_val(datos_finales["comprobante"].get("fecha_emision")),
+        "emisor.ruc": _get_val(datos_finales["emisor"]["ruc"]),
+        "emisor.razon_social": _get_val(datos_finales["emisor"]["razon_social"]),
+        "receptor.ruc_dni": _get_val(datos_finales["receptor"]["ruc_dni"]),
+        "receptor.razon_social": _get_val(datos_finales["receptor"]["razon_social"]),
+        "montos.total": _get_val(datos_finales["montos"]["total"]),
     }
     
     aciertos = 0
