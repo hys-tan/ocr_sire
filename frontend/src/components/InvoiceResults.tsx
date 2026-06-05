@@ -304,6 +304,39 @@ export default function InvoiceResults({ data, editedValues, onEditChange }: Inv
             <EditableFieldRow label="Tipo"         field={data.comprobante.tipo}         fieldKey="comprobante.tipo"         {...rowProps} />
             <EditableFieldRow label="Serie"         field={data.comprobante.serie}        fieldKey="comprobante.serie"        {...rowProps} />
             <EditableFieldRow label="Número"        field={data.comprobante.numero}       fieldKey="comprobante.numero"       {...rowProps} />
+
+            {/* Número SUNAT estandarizado — campo separado (Opción C) */}
+            {data.comprobante.numero_sunat != null ? (
+              <div className="flex justify-between items-center p-3 border-b border-gray-100 bg-blue-50/40">
+                <span className="text-sm font-medium text-gray-500 w-1/3 pl-2 flex-shrink-0">
+                  N° SUNAT (8 díg.)
+                </span>
+                <div className="flex items-center space-x-2 w-2/3 justify-end">
+                  <span className="text-sm font-mono font-semibold text-blue-700">
+                    {data.comprobante.numero_sunat}
+                  </span>
+                  <span
+                    title="Número estandarizado con ceros iniciales según formato SUNAT (8 dígitos). No reemplaza el valor OCR original."
+                    className="text-xs font-semibold text-blue-500 bg-blue-100 px-1.5 py-0.5 rounded cursor-help flex-shrink-0"
+                  >
+                    SUNAT
+                  </span>
+                </div>
+              </div>
+            ) : data.comprobante.numero_sunat_advertencia ? (
+              <div className="flex justify-between items-center p-3 border-b border-gray-100 bg-yellow-50/40">
+                <span className="text-sm font-medium text-gray-500 w-1/3 pl-2 flex-shrink-0">
+                  N° SUNAT (8 díg.)
+                </span>
+                <div className="flex items-center space-x-2 w-2/3 justify-end">
+                  <span className="text-xs text-yellow-700 font-medium text-right">
+                    {data.comprobante.numero_sunat_advertencia}
+                  </span>
+                  <span className="text-xs font-bold text-yellow-600 flex-shrink-0">⚠</span>
+                </div>
+              </div>
+            ) : null}
+
             <EditableFieldRow label="Fecha Emisión"field={data.comprobante.fecha_emision}fieldKey="comprobante.fecha_emision"{...rowProps} />
             <EditableFieldRow label="Moneda"       field={data.comprobante.moneda}       fieldKey="comprobante.moneda"       {...rowProps} />
           </div>

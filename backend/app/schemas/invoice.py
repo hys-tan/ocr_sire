@@ -17,6 +17,14 @@ class ComprobanteBase(BaseModel):
     numero: Optional[ConfidenceField] = Field(None, description="Ej: 0083104")
     fecha_emision: Optional[ConfidenceField] = Field(None, description="DD/MM/YYYY")
     moneda: Optional[ConfidenceField] = Field(None, description="PEN o USD")
+    numero_sunat: Optional[str] = Field(
+        None,
+        description="Número estandarizado SUNAT con 8 dígitos (zero-padded). Campo extra, no sobreescribe el crudo."
+    )
+    numero_sunat_advertencia: Optional[str] = Field(
+        None,
+        description="Advertencia si el número crudo no pudo ser estandarizado de forma segura."
+    )
 
 class EmisorBase(BaseModel):
     ruc: Optional[ConfidenceField] = Field(None, description="RUC de 11 dígitos")

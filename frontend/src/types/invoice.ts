@@ -15,6 +15,10 @@ export interface Comprobante {
   numero: ConfidenceField<string | null>;
   fecha_emision: ConfidenceField<string | null>;
   moneda: ConfidenceField<string | null>;
+  /** Número estandarizado SUNAT (8 dígitos con zeros iniciales). Calculado por el backend. */
+  numero_sunat?: string | null;
+  /** Advertencia si el número crudo tiene más o menos dígitos de los esperados. */
+  numero_sunat_advertencia?: string | null;
 }
 
 export interface Emisor {

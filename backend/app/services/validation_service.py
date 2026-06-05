@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from app.core.validators import is_valid_ruc, validate_math_logic
 from app.core.comprobante_utils import build_and_set_serie_numero
+from app.core.normalization_rules import normalizar_numero_sunat
 
 def validate_math(montos: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -60,7 +61,19 @@ def clean_extracted_data(data: Dict[str, Any]) -> Dict[str, Any]:
         data["receptor"]["ruc_dni"]["estrategia"] = "Error Validación: Módulo 11 falló"
         data["receptor"]["ruc_dni"]["score"] = 10
         
-    # 3. Validar Serie y Número
+    # 3. Número SUNAT — campo separado (Opción C)
+    # Se genera numero_sunat desde el número crudo extraído por el OCR.
+    # NO se sobreescribe el número original. Solo se añade el campo estandarizado.
+    numero_field = data["comprobante"].get("numero")
+    if numero_field and numero_field.get("valor"):
+        resultado_sunat = normalizar_numero_sunat(str(numero_field["valor"]))
+        data["comprobante"]["numero_sunat"] = resultado_sunat["numero_sunat"]
+        data["comprobante"]["numero_sunat_advertencia"] = resultado_sunat["advertencia"]
+    else:
+        data["comprobante"]["numero_sunat"] = None
+        data["comprobante"]["numero_sunat_advertencia"] = "Número no detectado"
+
+    # 4. Validar Serie y Número
     # Utilizamos el core comprobante_utils para construir y validar la serie/numero.
     build_and_set_serie_numero(
         data["comprobante"],

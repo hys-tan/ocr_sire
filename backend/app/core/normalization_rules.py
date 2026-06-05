@@ -92,6 +92,49 @@ def normalizar_monto(valor: float) -> float:
         return valor
     return round(valor, 2)
 
+
+def normalizar_numero_sunat(numero_raw: str) -> dict:
+    """
+    Estandariza el número de comprobante al formato de 8 dígitos exigido por SUNAT.
+
+    Regla SUNAT: El correlativo siempre debe ser de 8 dígitos con ceros a la izquierda.
+    Ej: 123 → 00000123 | 12345 → 00012345
+
+    Para evitar confusión con ceros ya presentes en el número crudo:
+    - Si el número crudo ya tiene 8 dígitos: se devuelve tal cual (sin tocar).
+    - Si tiene menos de 8: se aplica zfill(8) y se registra en 'numero_sunat'.
+    - Si tiene más de 8: valor anómalo, se devuelve advertencia y sin normalización.
+
+    Devuelve un dict con:
+      - numero_sunat: str | None  (valor estandarizado, o None si no aplica)
+      - advertencia: str | None   (mensaje si hay algo sospechoso)
+    """
+    if not numero_raw:
+        return {"numero_sunat": None, "advertencia": "Número no detectado"}
+
+    # Solo los dígitos importan para el formato SUNAT
+    solo_digitos = re.sub(r'\D', '', str(numero_raw).strip())
+
+    if not solo_digitos:
+        return {"numero_sunat": None, "advertencia": "El OCR no extrajo dígitos del número"}
+
+    longitud = len(solo_digitos)
+
+    if longitud == 8:
+        # Ya tiene el formato correcto — no se modifica
+        return {"numero_sunat": solo_digitos, "advertencia": None}
+    elif longitud < 8:
+        # Padding estándar SUNAT
+        padded = solo_digitos.zfill(8)
+        return {"numero_sunat": padded, "advertencia": None}
+    else:
+        # Más de 8 dígitos: anómalo (posible OCR doble lectura)
+        return {
+            "numero_sunat": None,
+            "advertencia": f"Número con {longitud} dígitos (esperado ≤ 8). Verificar manualmente."
+        }
+
+
 def correccion_contextual_numerica(texto: str) -> str:
     """
     Mejora: Si sabemos que el contexto es un número o monto,

@@ -49,7 +49,9 @@ export interface ExportRow {
   'Archivo': string;
   'Tipo Comprobante': string | null;
   'Serie': string | null;
-  'Número': string | null;
+  'N° Comprobante (OCR)': string | null;
+  'N° Comprobante (SUNAT)': string | null;
+  'N° Advertencia': string | null;
   'Fecha Emisión': string | null;
   'Moneda': string | null;
   'RUC Emisor': string | null;
@@ -82,7 +84,9 @@ export function buildExportRows(files: BatchFile[]): ExportRow[] {
         'Archivo': batchFile.file.name,
         'Tipo Comprobante': null,
         'Serie': null,
-        'Número': null,
+        'N° Comprobante (OCR)': null,
+        'N° Comprobante (SUNAT)': null,
+        'N° Advertencia': null,
         'Fecha Emisión': null,
         'Moneda': null,
         'RUC Emisor': null,
@@ -106,7 +110,9 @@ export function buildExportRows(files: BatchFile[]): ExportRow[] {
       'Archivo': batchFile.file.name,
       'Tipo Comprobante': resolve(d.comprobante.tipo,         'comprobante.tipo')          as string | null,
       'Serie':            resolve(d.comprobante.serie,        'comprobante.serie')         as string | null,
-      'Número':           resolve(d.comprobante.numero,       'comprobante.numero')        as string | null,
+      'N° Comprobante (OCR)': resolve(d.comprobante.numero,  'comprobante.numero')        as string | null,
+      'N° Comprobante (SUNAT)': d.comprobante.numero_sunat ?? null,
+      'N° Advertencia': d.comprobante.numero_sunat_advertencia ?? null,
       'Fecha Emisión':    resolve(d.comprobante.fecha_emision,'comprobante.fecha_emision') as string | null,
       'Moneda':           resolve(d.comprobante.moneda,       'comprobante.moneda')        as string | null,
       'RUC Emisor':       resolve(d.emisor.ruc,               'emisor.ruc')                as string | null,
@@ -142,7 +148,9 @@ export function exportToExcel(files: BatchFile[]): void {
     { wch: 28 },  // Archivo
     { wch: 24 },  // Tipo Comprobante
     { wch: 10 },  // Serie
-    { wch: 12 },  // Número
+    { wch: 20 },  // N° Comprobante (OCR)
+    { wch: 20 },  // N° Comprobante (SUNAT)
+    { wch: 32 },  // N° Advertencia
     { wch: 14 },  // Fecha Emisión
     { wch: 8  },  // Moneda
     { wch: 14 },  // RUC Emisor
@@ -195,7 +203,11 @@ export function exportToTXT(files: BatchFile[]): void {
     lines.push('');
     lines.push(`   Tipo comprobante   : ${row['Tipo Comprobante'] ?? '—'}`);
     lines.push(`   Serie              : ${row['Serie'] ?? '—'}`);
-    lines.push(`   Número             : ${row['Número'] ?? '—'}`);
+    lines.push(`   N° Comprobante (OCR)  : ${row['N° Comprobante (OCR)'] ?? '—'}`);
+    lines.push(`   N° Comprobante (SUNAT): ${row['N° Comprobante (SUNAT)'] ?? '—'}`);
+    if (row['N° Advertencia']) {
+      lines.push(`   ⚠ Advertencia N°     : ${row['N° Advertencia']}`);
+    }
     lines.push(`   Fecha de emisión   : ${row['Fecha Emisión'] ?? '—'}`);
     lines.push(`   Moneda             : ${row['Moneda'] ?? '—'}`);
     lines.push('');
