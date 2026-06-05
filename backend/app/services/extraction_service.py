@@ -3,6 +3,8 @@ import unicodedata
 import logging
 from typing import Dict, Any
 from app.services.normalization_service import aplicar_normalizacion
+from app.core.normalization_rules import correccion_contextual_numerica
+from app.services.confidence_service import enriquecer_lote_con_confianza_hibrida
 
 # Configurar Logging para auditar estrategias y facilitar debugging
 logging.basicConfig(
@@ -50,9 +52,26 @@ def calcular_score(estrategia: str, confianza: str) -> int:
     return 20
 
 def extract_ruc(text: str) -> list:
-    """Extrae todos los RUCs válidos."""
+    """Extrae todos los RUCs válidos, incluyendo rescate de sustituciones de caracteres comunes de OCR."""
+    rucs = []
+    
+    # 1. Intento estándar exacto
+    exact_matches = re.findall(r'\b(?:10|15|17|20)\d{9}\b', text)
+    for r in exact_matches:
+        if r not in rucs:
+            rucs.append(r)
+            
+    # 2. Rescate con corrección de caracteres confusos de OCR
+    # Buscamos cualquier bloque de 11 caracteres que contenga dígitos o caracteres sustituibles comunes
+    candidates = re.findall(r'\b[0-9OoIiLlSsBbZz]{11}\b', text)
+    for c in candidates:
+        corrected = correccion_contextual_numerica(c)
+        if len(corrected) == 11 and corrected.startswith(('10', '15', '17', '20')):
+            if corrected not in rucs:
+                rucs.append(corrected)
+                logger.info(f"RUC rescatado por corrección de OCR: {c} -> {corrected}")
+                
     estrategia = "Regex (11 dígitos, prefijo válido)"
-    rucs = re.findall(r'\b(?:10|15|17|20)\d{9}\b', text)
     return [{
         "valor": r,
         "confianza": "ALTA",
@@ -61,27 +80,57 @@ def extract_ruc(text: str) -> list:
     } for r in rucs]
 
 def extract_serie_numero(text: str) -> Dict[str, Any]:
-    """Extrae la serie y número combinados (mantenido para compatibilidad con extract_tipo_comprobante)."""
-    match = re.search(r'\b([FBE]\w{3})\s*-\s*(\d{1,8})\b', text, re.IGNORECASE)
+    """Extrae la serie y número combinados."""
+    # Ejemplos que calzan: F001-0083104, F0O1 0083l04, E001:927
+    patron = r'\b([FBE][A-Z0-9OoIiLlSsBbZz]{3})\s*[\s\-:\.]?\s*([0-9OoIiLlSsBbZz]{1,8})\b'
+    match = re.search(patron, text, re.IGNORECASE)
     if match:
-        estrategia = "Regex Serie-Número"
-        return {"valor": f"{match.group(1).upper()}-{match.group(2)}", "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
+        serie_raw = match.group(1).upper()
+        num_raw = match.group(2)
+        
+        # Corregir la serie (sin eliminar caracteres de texto válidos)
+        prefijo = serie_raw[0]
+        cuerpo_serie = correccion_contextual_numerica(serie_raw[1:], strip_non_numeric=False)
+        serie_corregida = f"{prefijo}{cuerpo_serie.zfill(3)}"
+        
+        # Corregir el número (solo dígitos permitidos)
+        num_corregido = correccion_contextual_numerica(num_raw)
+        
+        if len(serie_corregida) == 4 and num_corregido:
+            estrategia = "Regex Serie-Número"
+            return {
+                "valor": f"{serie_corregida}-{num_corregido}",
+                "confianza": "ALTA",
+                "estrategia": estrategia,
+                "score": calcular_score(estrategia, "ALTA")
+            }
+            
     return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
 
 def extract_serie(text: str) -> Dict[str, Any]:
     """Extrae SOLO la serie del comprobante (ej: F001, B002)."""
-    match = re.search(r'\b([FBE]\w{3})\s*-\s*\d{1,8}\b', text, re.IGNORECASE)
-    if match:
-        estrategia = "Regex Serie-Número"
-        return {"valor": match.group(1).upper(), "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
+    res = extract_serie_numero(text)
+    if res["valor"]:
+        serie = res["valor"].split('-')[0]
+        return {
+            "valor": serie,
+            "confianza": res["confianza"],
+            "estrategia": res["estrategia"],
+            "score": res["score"]
+        }
     return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
 
 def extract_numero(text: str) -> Dict[str, Any]:
     """Extrae SOLO el número correlativo del comprobante (ej: 0083104)."""
-    match = re.search(r'\b[FBE]\w{3}\s*-\s*(\d{1,8})\b', text, re.IGNORECASE)
-    if match:
-        estrategia = "Regex Serie-Número"
-        return {"valor": match.group(1), "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
+    res = extract_serie_numero(text)
+    if res["valor"]:
+        numero = res["valor"].split('-')[1]
+        return {
+            "valor": numero,
+            "confianza": res["confianza"],
+            "estrategia": res["estrategia"],
+            "score": res["score"]
+        }
     return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
 
 def extract_tipo_comprobante(text: str, serie_dict: dict) -> Dict[str, Any]:
@@ -110,21 +159,26 @@ def extract_fecha(text: str) -> Dict[str, Any]:
     return {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
 
 def extract_montos(text: str) -> Dict[str, Any]:
-    """Busca montos (Subtotal, IGV, Total) devolviendo dicts de confianza."""
+    """Busca montos (Subtotal, IGV, Total) devolviendo dicts de confianza con rescate de sustituciones de OCR."""
     montos = {
         "subtotal": {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default", "score": calcular_score("Default", "BAJA")},
         "igv":      {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default", "score": calcular_score("Default", "BAJA")},
         "total":    {"valor": 0.0, "confianza": "BAJA", "estrategia": "Default", "score": calcular_score("Default", "BAJA")}
     }
     
-    cantidades = re.findall(r'\b\d{1,3}(?:,\d{3})*\.\d{2}\b', text)
-    if not cantidades:
-        return montos
-        
+    # Expresión regular flexible para buscar números con posibles errores de OCR
+    patron_monto = r'\b[0-9OoIiLlSsBbZz]{1,3}(?:[.,\s][0-9OoIiLlSsBbZz]{3})*[.,][0-9OoIiLlSsBbZz]{2}\b'
+    cantidades_raw = re.findall(patron_monto, text)
+    
     valores = []
-    for c in cantidades:
+    for c in cantidades_raw:
         try:
-            val = float(c.replace(',', ''))
+            num_str = correccion_contextual_numerica(c)
+            if num_str.count('.') > 1:
+                parts = num_str.split('.')
+                num_str = "".join(parts[:-1]) + "." + parts[-1]
+                
+            val = float(num_str)
             valores.append(val)
         except ValueError:
             pass
@@ -156,12 +210,24 @@ def is_valid_razon_social(text: str) -> bool:
     if len(text) < 4:
         return False # Demasiado corto
         
+    # Debe comenzar con letra o número
+    if not re.match(r'^[A-Za-z0-9Ññ]', text):
+        return False
+        
+    # No debe contener símbolos extraños típicos del ruido del OCR
+    if re.search(r'[=\[\]{}<>|_]', text):
+        return False
+        
     # Descartar si es solo números o símbolos
     if re.match(r'^[\d\W]+$', text):
         return False
         
     # Descartar palabras clave de dirección o detalles (Validación de SUNAT)
-    bad_keywords = ["AV.", "AVENIDA", "CALLE", "JIRON", "JR.", "URB.", "MANZANA", "MZ.", "LOTE", "TELEFONO", "TELF", "EMAIL", "CORREO", "LIMA"]
+    bad_keywords = [
+        "AV.", "AVENIDA", "CALLE", "JIRON", "JR.", "URB.", "MANZANA", "MZ.", "LOTE", 
+        "TELEFONO", "TELF", "EMAIL", "CORREO", "LIMA", "FORMA", "PAGO", "CREDITO", 
+        "REPRESENTACION", "IMPRESA", "VISITA", "WWW", "HTTP", "PAGINA", "PÁGINA"
+    ]
     text_upper = text.upper()
     for kw in bad_keywords:
         if kw in text_upper.split() or text_upper.startswith(kw):
@@ -314,23 +380,72 @@ def extract_razon_social_receptor(lines: list, receptor_ruc: str = None) -> Dict
     logger.warning("Fallback activado: No se pudo detectar Receptor seguro.")
     return {"valor": "No detectado", "confianza": "BAJA", "estrategia": "Fallback", "score": calcular_score("Fallback", "BAJA")}
 
-def parse_invoice(raw_text: str) -> Dict[str, Any]:
+def clasificar_rucs(rucs_list: list, lines: list) -> tuple:
+    """
+    Clasifica una lista de RUCs en (emisor_ruc_dict, receptor_ruc_dict).
+    Usa proximidad a palabras clave de receptor/cliente para identificar al receptor.
+    """
+    default_empty = {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
+    if not rucs_list:
+        return default_empty, default_empty
+        
+    if len(rucs_list) == 1:
+        ruc_val = rucs_list[0]["valor"]
+        es_receptor = False
+        for i, line in enumerate(lines):
+            if ruc_val in line:
+                rango = lines[max(0, i-2):min(len(lines), i+3)]
+                rango_str = " ".join(rango).upper()
+                if any(kw in rango_str for kw in ["CLIENTE", "RECEPTOR", "ADQUIRENTE", "SEÑOR", "SENOR", "FACTURADO"]):
+                    es_receptor = True
+                    break
+        if es_receptor:
+            return default_empty, rucs_list[0]
+        else:
+            return rucs_list[0], default_empty
+            
+    ruc_scores = []
+    for r_dict in rucs_list:
+        ruc_val = r_dict["valor"]
+        score_receptor = 0
+        for i, line in enumerate(lines):
+            if ruc_val in line:
+                rango = lines[max(0, i-2):min(len(lines), i+3)]
+                rango_str = " ".join(rango).upper()
+                if any(kw in rango_str for kw in ["CLIENTE", "RECEPTOR", "ADQUIRENTE", "SEÑOR", "SENOR", "FACTURADO"]):
+                    score_receptor += 10
+                if i > len(lines) * 0.8:
+                    score_receptor -= 5
+        ruc_scores.append((score_receptor, r_dict))
+        
+    ruc_scores.sort(key=lambda x: x[0])
+    
+    emisor = dict(ruc_scores[0][1])
+    receptor = dict(ruc_scores[-1][1])
+    
+    emisor["estrategia"] = "Heurística de Clasificación (Emisor)"
+    receptor["estrategia"] = "Heurística de Clasificación (Receptor)"
+    
+    return emisor, receptor
+
+def parse_invoice(raw_text: str, word_confidences: Dict[str, list] = None) -> Dict[str, Any]:
     """
     Función orquestadora que toma el texto crudo del OCR y devuelve un JSON
     estructurado con los requerimientos mínimos de SUNAT.
     """
     logger.info("=== Iniciando Pipeline de Extracción ===")
     logger.debug(f"Texto Crudo a procesar:\n{raw_text}")
+    if word_confidences:
+        logger.info(f"Confianza nativa recibida para {len(word_confidences)} palabras.")
     
     # El texto ya viene limpio desde cleaning_service.py
     cleaned_text = raw_text.replace('\n', ' ')
     # Lista de líneas para heurísticas estructurales
     lines = raw_text.split('\n')
     
-    # RUCs
+    # RUCs y Clasificación Inteligente
     rucs = extract_ruc(cleaned_text)
-    emisor_ruc_dict = rucs[0] if len(rucs) > 0 else {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
-    receptor_ruc_dict = rucs[1] if len(rucs) > 1 else {"valor": None, "confianza": "BAJA", "estrategia": "No detectado", "score": 0}
+    emisor_ruc_dict, receptor_ruc_dict = clasificar_rucs(rucs, lines)
     
     # Razones Sociales (Fallback System)
     emisor_ruc_idx = -1
@@ -374,7 +489,7 @@ def parse_invoice(raw_text: str) -> Dict[str, Any]:
     logger.info("=== Normalización Aplicada ===")
 
     # Estructura de Salida (Todo envuelto en diccionarios de Confianza)
-    return {
+    extracted_data = {
         "comprobante": {
             "tipo": tipo_comprobante,
             "serie": serie,
@@ -392,6 +507,12 @@ def parse_invoice(raw_text: str) -> Dict[str, Any]:
         },
         "montos": montos
     }
+
+    if word_confidences:
+        extracted_data = enriquecer_lote_con_confianza_hibrida(extracted_data, word_confidences)
+        logger.info("=== Confianza Híbrida Aplicada ===")
+
+    return extracted_data
 
 # --- PRUEBA LOCAL ---
 if __name__ == "__main__":

@@ -72,13 +72,15 @@ async def upload_and_extract(file: UploadFile = File(...)):
 
     try:
         # FASE 0: Visión Computacional y OCR
-        raw_text = process_document(temp_path)
+        ocr_res = process_document(temp_path)
+        raw_text = ocr_res["text"]
+        word_confidences = ocr_res["word_confidences"]
 
         # FASE 1: Limpieza del OCR
         cleaned_text = clean_ocr_text(raw_text)
 
         # FASE 2 y 4: Extracción y Fallbacks
-        extracted_data = parse_invoice(cleaned_text)
+        extracted_data = parse_invoice(cleaned_text, word_confidences=word_confidences)
 
         # FASE 3 y 5: Validación y Post-procesamiento
         final_data = clean_extracted_data(extracted_data)

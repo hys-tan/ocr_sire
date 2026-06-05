@@ -28,8 +28,8 @@ def clean_ocr_text(raw_text: str) -> str:
         if re.match(r'^[\W_]+$', line):
             continue
             
-        # Regla 4: Eliminar URLs obvias
-        if "HTTP://" in line.upper() or "HTTPS://" in line.upper() or "WWW." in line.upper():
+        # Regla 4: Eliminar líneas que son únicamente una URL obvia e independiente
+        if re.match(r'^(https?://|www\.)[^\s]+$', line, re.IGNORECASE):
             continue
             
         # Normalizar espacios múltiples dentro de la línea sobreviviente

@@ -172,9 +172,11 @@ async def extract_batch(files: List[UploadFile] = File(...)):
         t_inicio = time.perf_counter()
         try:
             logger.info(f"[Batch] Procesando: {nombre}")
-            raw_text    = process_document(tmp_path)
+            ocr_res     = process_document(tmp_path)
+            raw_text    = ocr_res["text"]
+            word_confidences = ocr_res["word_confidences"]
             cleaned     = clean_ocr_text(raw_text)
-            extracted   = parse_invoice(cleaned)
+            extracted   = parse_invoice(cleaned, word_confidences=word_confidences)
             final_data  = clean_extracted_data(extracted)
             elapsed     = time.perf_counter() - t_inicio
             final_data["metricas"] = _calcular_metricas(final_data, elapsed)

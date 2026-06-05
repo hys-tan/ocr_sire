@@ -6,12 +6,12 @@ import re
 
 _SIGLAS_JURIDICAS = [
     # Sociedades más comunes en Perú
-    (r'\bS\s*\.?\s*A\s*\.?\s*C\s*\.?\b',       'S.A.C.'),   # Sociedad Anónima Cerrada
-    (r'\bS\s*\.?\s*A\s*\.?\b',                  'S.A.'),     # Sociedad Anónima
-    (r'\bE\s*\.?\s*I\s*\.?\s*R\s*\.?\s*L\s*\.?\b', 'E.I.R.L.'),  # Empresa Individual de Resp. Limitada
-    (r'\bS\s*\.?\s*R\s*\.?\s*L\s*\.?\b',       'S.R.L.'),   # Sociedad de Responsabilidad Limitada
-    (r'\bS\s*\.?\s*A\s*\.?\s*A\s*\.?\b',       'S.A.A.'),   # Sociedad Anónima Abierta
-    (r'\bS\s*\.?\s*C\s*\.?\s*R\s*\.?\s*L\s*\.?\b', 'S.C.R.L.'),  # Soc. Comercial de Resp. Limitada
+    (r'\bS\s*\.?\s*A\s*\.?\s*C\s*\.?(?!\w)',       'S.A.C.'),   # Sociedad Anónima Cerrada
+    (r'\bS\s*\.?\s*A\s*\.?(?!\w)',                  'S.A.'),     # Sociedad Anónima
+    (r'\bE\s*\.?\s*I\s*\.?\s*R\s*\.?\s*L\s*\.?(?!\w)', 'E.I.R.L.'),  # Empresa Individual de Resp. Limitada
+    (r'\bS\s*\.?\s*R\s*\.?\s*L\s*\.?(?!\w)',       'S.R.L.'),   # Sociedad de Responsabilidad Limitada
+    (r'\bS\s*\.?\s*A\s*\.?\s*A\s*\.?(?!\w)',       'S.A.A.'),   # Sociedad Anónima Abierta
+    (r'\bS\s*\.?\s*C\s*\.?\s*R\s*\.?\s*L\s*\.?(?!\w)', 'S.C.R.L.'),  # Soc. Comercial de Resp. Limitada
     # Variantes sin separación de espacios (lectura OCR compacta)
     (r'\bSAC\b',    'S.A.C.'),
     (r'\bEIRL\b',   'E.I.R.L.'),
@@ -30,14 +30,49 @@ _ABREV_DIRECCION = [
 
 def normalizar_siglas_juridicas(texto: str) -> str:
     """
-    Corrige siglas de tipo jurídico que el OCR fragmenta con espacios.
+    Corrige siglas de tipo jurídico que el OCR fragmenta con espacios, en un solo paso.
     """
     if not texto:
         return texto
 
-    for patron, reemplazo in _SIGLAS_JURIDICAS:
+    # Único regex con alternativas ordenadas por longitud (más largas a más cortas)
+    pattern = re.compile(
+        r'\b('
+        r'E\s*\.?\s*I\s*\.?\s*R\s*\.?\s*L\s*\.?|'
+        r'S\s*\.?\s*C\s*\.?\s*R\s*\.?\s*L\s*\.?|'
+        r'S\s*\.?\s*A\s*\.?\s*C\s*\.?|'
+        r'S\s*\.?\s*R\s*\.?\s*L\s*\.?|'
+        r'S\s*\.?\s*A\s*\.?\s*A\s*\.?|'
+        r'S\s*\.?\s*A\s*\.?'
+        r')(?!\w)',
+        re.IGNORECASE
+    )
+    
+    def replace_sigla(match):
+        matched_str = match.group(1).upper()
+        clean_sigla = re.sub(r'[\s\.]', '', matched_str)
+        mapping = {
+            'EIRL': 'E.I.R.L.',
+            'SCRL': 'S.C.R.L.',
+            'SAC': 'S.A.C.',
+            'SRL': 'S.R.L.',
+            'SAA': 'S.A.A.',
+            'SA': 'S.A.'
+        }
+        return mapping.get(clean_sigla, matched_str)
+        
+    texto = pattern.sub(replace_sigla, texto)
+    
+    # Reemplazar formas directas sin espacios adicionales
+    for patron, reemplazo in [
+        (r'\bSAC\b', 'S.A.C.'),
+        (r'\bEIRL\b', 'E.I.R.L.'),
+        (r'\bSRL\b', 'S.R.L.'),
+        (r'\bSAA\b', 'S.A.A.'),
+        (r'\bSCRL\b', 'S.C.R.L.'),
+    ]:
         texto = re.sub(patron, reemplazo, texto, flags=re.IGNORECASE)
-
+        
     return texto
 
 
@@ -135,7 +170,7 @@ def normalizar_numero_sunat(numero_raw: str) -> dict:
         }
 
 
-def correccion_contextual_numerica(texto: str) -> str:
+def correccion_contextual_numerica(texto: str, strip_non_numeric: bool = True) -> str:
     """
     Mejora: Si sabemos que el contexto es un número o monto,
     corregimos letras que el OCR suele confundir con números.
@@ -164,6 +199,8 @@ def correccion_contextual_numerica(texto: str) -> str:
         else:
             resultado += char
             
-    # Eliminar cualquier cosa que no sea dígito o punto
-    resultado = re.sub(r'[^\d\.]', '', resultado)
+    if strip_non_numeric:
+        # Eliminar cualquier cosa que no sea dígito o punto
+        resultado = re.sub(r'[^\d\.]', '', resultado)
+        
     return resultado
