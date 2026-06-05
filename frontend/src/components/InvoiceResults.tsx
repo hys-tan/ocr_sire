@@ -268,7 +268,34 @@ function calcularScoreGlobal(data: InvoiceResponse): number {
 export default function InvoiceResults({ data, editedValues, onEditChange }: InvoiceResultsProps) {
 
   const handleEdit = (key: string, value: string) => {
-    onEditChange({ ...editedValues, [key]: value });
+    const newEdits = { ...editedValues };
+    let finalValue = value;
+
+    // Si es un campo de montos, formatear a 2 decimales y autocalcular el resto
+    if (key.startsWith('montos.')) {
+      // Limpiar el string de posibles comas o texto extra, dejando solo números y un punto
+      const cleanStr = value.replace(/[^0-9.-]/g, '');
+      const numValue = parseFloat(cleanStr);
+      
+      if (!isNaN(numValue)) {
+        finalValue = numValue.toFixed(2);
+        
+        if (key === 'montos.total') {
+          const sub = numValue / 1.18;
+          const igv = numValue - sub;
+          newEdits['montos.subtotal'] = sub.toFixed(2);
+          newEdits['montos.igv'] = igv.toFixed(2);
+        } else if (key === 'montos.subtotal') {
+          const igv = numValue * 0.18;
+          const tot = numValue + igv;
+          newEdits['montos.igv'] = igv.toFixed(2);
+          newEdits['montos.total'] = tot.toFixed(2);
+        }
+      }
+    }
+
+    newEdits[key] = finalValue;
+    onEditChange(newEdits);
   };
   const handleClear = (key: string) => {
     const copy = { ...editedValues };
