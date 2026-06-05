@@ -1,7 +1,44 @@
+import { useState } from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, Eye, FileText, BarChart2, Clock, Download, FileSpreadsheet } from 'lucide-react';
 import type { BatchFile } from '../types/batch';
 import { formatMB } from '../types/batch';
 import { exportToExcel, exportToCSV, exportToTXT } from '../services/export.service';
+
+// ─── Detección de campos problemáticos en el lote ─────────────────────────────
+
+/** Cuenta cuántos documentos del lote tienen al menos un campo con confianza BAJA o advertencia SUNAT. */
+function contarDocumentosConProblemas(files: BatchFile[]): number {
+  return files.filter(f => {
+    const d = f.result;
+    if (!d) return false;
+    const ev = f.editedValues ?? {};
+    const campos = [
+      { key: 'comprobante.tipo',          field: d.comprobante.tipo },
+      { key: 'comprobante.serie',         field: d.comprobante.serie },
+      { key: 'comprobante.numero',        field: d.comprobante.numero },
+      { key: 'comprobante.fecha_emision', field: d.comprobante.fecha_emision },
+      { key: 'comprobante.moneda',        field: d.comprobante.moneda },
+      { key: 'emisor.ruc',                field: d.emisor.ruc },
+      { key: 'emisor.razon_social',       field: d.emisor.razon_social },
+      { key: 'receptor.ruc_dni',          field: d.receptor.ruc_dni },
+      { key: 'receptor.razon_social',     field: d.receptor.razon_social },
+      { key: 'montos.subtotal',           field: d.montos.subtotal },
+      { key: 'montos.igv',                field: d.montos.igv },
+      { key: 'montos.total',              field: d.montos.total },
+    ];
+    const tieneBaja = campos.some(c => !(c.key in ev) && c.field?.confianza === 'BAJA');
+    // Verificar número SUNAT: tanto del backend como el valor editado
+    const editedNum = ev['comprobante.numero'];
+    let tieneSunatAdv = false;
+    if (editedNum) {
+      const digitos = editedNum.replace(/\D/g, '');
+      tieneSunatAdv = digitos.length > 8;
+    } else {
+      tieneSunatAdv = !!d.comprobante.numero_sunat_advertencia;
+    }
+    return tieneBaja || tieneSunatAdv;
+  }).length;
+}
 
 interface ResultsTableProps {
   files: BatchFile[];
@@ -54,6 +91,18 @@ export default function ResultsTable({ files, onSelectFile }: ResultsTableProps)
     : 0;
   const totalTime = files.reduce((acc, f) => acc + (f.result?.metricas?.tiempo_procesamiento ?? 0), 0);
 
+  // ── Modal de advertencia para exportación ───────────────────────────────
+  const [exportPending, setExportPending] = useState<(() => void) | null>(null);
+  const docsCon = contarDocumentosConProblemas(files);
+
+  const handleExport = (fn: () => void) => {
+    if (docsCon > 0) {
+      setExportPending(() => fn);  // guardar la función a ejecutar
+    } else {
+      fn();
+    }
+  };
+
   return (
     <div className="w-full bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
 
@@ -83,7 +132,7 @@ export default function ResultsTable({ files, onSelectFile }: ResultsTableProps)
           {done.length > 0 && (
             <div className="flex items-center space-x-2">
               <button
-                onClick={() => exportToExcel(files)}
+                onClick={() => handleExport(() => exportToExcel(files))}
                 className="flex items-center space-x-1.5 px-3 py-1.5 bg-white text-purple-700 rounded-lg text-xs font-semibold hover:bg-purple-50 transition-colors shadow-sm"
                 title="Descargar resultados en Excel"
               >
@@ -91,7 +140,7 @@ export default function ResultsTable({ files, onSelectFile }: ResultsTableProps)
                 <span>Excel</span>
               </button>
               <button
-                onClick={() => exportToCSV(files)}
+                onClick={() => handleExport(() => exportToCSV(files))}
                 className="flex items-center space-x-1.5 px-3 py-1.5 bg-purple-500 text-white rounded-lg text-xs font-semibold hover:bg-purple-400 transition-colors border border-purple-400"
                 title="Descargar resultados en CSV"
               >
@@ -99,7 +148,7 @@ export default function ResultsTable({ files, onSelectFile }: ResultsTableProps)
                 <span>CSV</span>
               </button>
               <button
-                onClick={() => exportToTXT(files)}
+                onClick={() => handleExport(() => exportToTXT(files))}
                 className="flex items-center space-x-1.5 px-3 py-1.5 bg-purple-500 text-white rounded-lg text-xs font-semibold hover:bg-purple-400 transition-colors border border-purple-400"
                 title="Descargar reporte en texto plano"
               >
@@ -223,6 +272,43 @@ export default function ResultsTable({ files, onSelectFile }: ResultsTableProps)
           </tbody>
         </table>
       </div>
+
+      {/* ── Modal de advertencia al exportar ────────────────────────────── */}
+      {exportPending !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-7 max-w-sm w-full mx-4">
+            <div className="text-center mb-5">
+              <div className="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <AlertTriangle className="text-yellow-500" size={28} />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">
+                {docsCon} documento{docsCon > 1 ? 's' : ''} con baja precisión
+              </h3>
+              <p className="text-sm text-gray-500 mt-2">
+                {docsCon > 1
+                  ? `Hay ${docsCon} documentos con campos de precisión roja o número SUNAT inválido.`
+                  : 'Hay 1 documento con campos de precisión roja o número SUNAT inválido.'}
+                {' '}¿Desea exportar igualmente?
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setExportPending(null)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { exportPending(); setExportPending(null); }}
+                className="flex-1 py-2.5 rounded-xl bg-purple-600 text-white font-semibold text-sm hover:bg-purple-700 transition-colors"
+              >
+                Exportar igualmente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

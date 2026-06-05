@@ -77,6 +77,20 @@ const isNormalized = (field: ConfidenceField<any> | undefined | null): boolean =
     String(field.valor_normalizado) !== String(field.valor);
 };
 
+/**
+ * Replica en el frontend la misma regla de padding que usa el backend:
+ * strips non-digits, then zero-pads to 8 if < 8 digits.
+ * Devuelve { sunat, advertencia }.
+ */
+function computeNumeroSunat(raw: string): { sunat: string | null; advertencia: string | null } {
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return { sunat: null, advertencia: 'No se detectaron dígitos en el número ingresado' };
+  const len = digits.length;
+  if (len === 8)  return { sunat: digits, advertencia: null };
+  if (len < 8)   return { sunat: digits.padStart(8, '0'), advertencia: null };
+  return { sunat: null, advertencia: `Número con ${len} dígitos (esperado ≤ 8). Verificar manualmente.` };
+}
+
 // ─── Fila Editable ────────────────────────────────────────────────────────────
 
 interface EditableFieldRowProps {
@@ -305,37 +319,49 @@ export default function InvoiceResults({ data, editedValues, onEditChange }: Inv
             <EditableFieldRow label="Serie"         field={data.comprobante.serie}        fieldKey="comprobante.serie"        {...rowProps} />
             <EditableFieldRow label="Número"        field={data.comprobante.numero}       fieldKey="comprobante.numero"       {...rowProps} />
 
-            {/* Número SUNAT estandarizado — campo separado (Opción C) */}
-            {data.comprobante.numero_sunat != null ? (
-              <div className="flex justify-between items-center p-3 border-b border-gray-100 bg-blue-50/40">
-                <span className="text-sm font-medium text-gray-500 w-1/3 pl-2 flex-shrink-0">
-                  N° SUNAT (8 díg.)
-                </span>
-                <div className="flex items-center space-x-2 w-2/3 justify-end">
-                  <span className="text-sm font-mono font-semibold text-blue-700">
-                    {data.comprobante.numero_sunat}
+            {/* Número SUNAT estandarizado — campo derivado (no editable, actualiza con edición del Número) */}
+            {(() => {
+              // Si el usuario editó el campo Número, recalcular en tiempo real
+              const edited = editedValues['comprobante.numero'];
+              const derived = edited
+                ? computeNumeroSunat(edited)
+                : { sunat: data.comprobante.numero_sunat ?? null, advertencia: data.comprobante.numero_sunat_advertencia ?? null };
+
+              if (derived.sunat != null) return (
+                <div className="flex justify-between items-center p-3 border-b border-gray-100 bg-blue-50/40">
+                  <span className="text-sm font-medium text-gray-500 w-1/3 pl-2 flex-shrink-0">
+                    Número Sunat (normalizado)
                   </span>
-                  <span
-                    title="Número estandarizado con ceros iniciales según formato SUNAT (8 dígitos). No reemplaza el valor OCR original."
-                    className="text-xs font-semibold text-blue-500 bg-blue-100 px-1.5 py-0.5 rounded cursor-help flex-shrink-0"
-                  >
-                    SUNAT
-                  </span>
+                  <div className="flex items-center space-x-2 w-2/3 justify-end">
+                    <span className="text-sm font-mono font-semibold text-blue-700">
+                      {derived.sunat}
+                    </span>
+                    <span
+                      title="Número estandarizado con ceros iniciales según formato SUNAT (8 dígitos). No reemplaza el valor OCR original."
+                      className="text-xs font-semibold text-blue-500 bg-blue-100 px-1.5 py-0.5 rounded cursor-help flex-shrink-0"
+                    >
+                      SUNAT
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ) : data.comprobante.numero_sunat_advertencia ? (
-              <div className="flex justify-between items-center p-3 border-b border-gray-100 bg-yellow-50/40">
-                <span className="text-sm font-medium text-gray-500 w-1/3 pl-2 flex-shrink-0">
-                  N° SUNAT (8 díg.)
-                </span>
-                <div className="flex items-center space-x-2 w-2/3 justify-end">
-                  <span className="text-xs text-yellow-700 font-medium text-right">
-                    {data.comprobante.numero_sunat_advertencia}
+              );
+
+              if (derived.advertencia) return (
+                <div className="flex justify-between items-center p-3 border-b border-gray-100 bg-yellow-50/40">
+                  <span className="text-sm font-medium text-gray-500 w-1/3 pl-2 flex-shrink-0">
+                    Número Sunat (normalizado)
                   </span>
-                  <span className="text-xs font-bold text-yellow-600 flex-shrink-0">⚠</span>
+                  <div className="flex items-center space-x-2 w-2/3 justify-end">
+                    <span className="text-xs text-yellow-700 font-medium text-right">
+                      {derived.advertencia}
+                    </span>
+                    <span className="text-xs font-bold text-yellow-600 flex-shrink-0">⚠</span>
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              );
+
+              return null;
+            })()}
 
             <EditableFieldRow label="Fecha Emisión"field={data.comprobante.fecha_emision}fieldKey="comprobante.fecha_emision"{...rowProps} />
             <EditableFieldRow label="Moneda"       field={data.comprobante.moneda}       fieldKey="comprobante.moneda"       {...rowProps} />
