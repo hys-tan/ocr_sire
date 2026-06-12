@@ -77,7 +77,10 @@ def evaluate_metrics():
 
     # Métricas detalladas
     metricas_por_calidad = {}
-    metricas_por_campo = {f"{c[0]}_{c[1]}": {"aciertos": 0, "total": 0} for c in campos_evaluar}
+    metricas_por_campo = {
+        f"{c[0]}_{c[1]}": {"aciertos_global": 0, "total_global": 0, "por_calidad": {}} 
+        for c in campos_evaluar
+    }
 
     for filename, expected_data in ground_truth.items():
         image_path = os.path.join(images_dir, filename)
@@ -124,9 +127,14 @@ def evaluate_metrics():
                 nombre_columna = f"{categoria}_{campo}"
                 fila_resultado[nombre_columna] = acierto
                 
-                # Tracker por campo
-                metricas_por_campo[nombre_columna]["aciertos"] += acierto
-                metricas_por_campo[nombre_columna]["total"] += 1
+                # Tracker por campo (Global y Cruzado)
+                metricas_por_campo[nombre_columna]["aciertos_global"] += acierto
+                metricas_por_campo[nombre_columna]["total_global"] += 1
+                
+                if calidad not in metricas_por_campo[nombre_columna]["por_calidad"]:
+                    metricas_por_campo[nombre_columna]["por_calidad"][calidad] = {"aciertos": 0, "total": 0}
+                metricas_por_campo[nombre_columna]["por_calidad"][calidad]["aciertos"] += acierto
+                metricas_por_campo[nombre_columna]["por_calidad"][calidad]["total"] += 1
                 
             precision_factura = (aciertos_factura / len(campos_evaluar)) * 100
             fila_resultado["Precision_Global_Porcentaje"] = round(precision_factura, 2)
@@ -153,6 +161,24 @@ def evaluate_metrics():
             writer.writerows(resultados)
             
         precision_total = (total_aciertos_global / total_campos_global) * 100 if total_campos_global > 0 else 0
+        
+        # Re-abrir para añadir fila de promedios al final
+        with open(output_csv, 'a', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            fila_promedios = {
+                "Archivo": "PROMEDIO_GLOBAL",
+                "Motor": "PaddleOCR Base",
+                "Calidad": "-",
+                "Precision_Global_Porcentaje": round(precision_total, 2)
+            }
+            for campo, stats in metricas_por_campo.items():
+                if stats["total_global"] > 0:
+                    fila_promedios[campo] = round((stats["aciertos_global"] / stats["total_global"]) * 100, 2)
+                else:
+                    fila_promedios[campo] = 0.0
+            
+            writer.writerow(fila_promedios)
+            
         print(f"\n==================================================")
         print(f"MÉTRICAS FINALIZADAS PARA PADDLEOCR BASE")
         print(f"Facturas evaluadas: {total_facturas}")
@@ -177,11 +203,27 @@ def evaluate_metrics():
                     md.write(f"- **Calidad '{cal}':** `{prec_cal:.2f}%` ({stats['facturas']} facturas)\n")
             md.write("\n")
             
-            md.write("## Precisión por Campo de Datos\n")
+            md.write("## Precisión por Campo de Datos (Matriz Cruzada)\n")
+            calidades_detectadas = sorted(list(metricas_por_calidad.keys()))
+            
+            # Encabezado de la tabla
+            headers = ["Campo de Dato", "Global"] + [f"Calidad '{c}'" for c in calidades_detectadas]
+            md.write("| " + " | ".join(headers) + " |\n")
+            md.write("|" + "|".join([":---"] * len(headers)) + "|\n")
+            
             for campo, stats in metricas_por_campo.items():
-                if stats["total"] > 0:
-                    prec_campo = (stats["aciertos"] / stats["total"]) * 100
-                    md.write(f"- **{campo}:** `{prec_campo:.2f}%`\n")
+                if stats["total_global"] > 0:
+                    prec_global = (stats["aciertos_global"] / stats["total_global"]) * 100
+                    fila = [f"**{campo}**", f"`{prec_global:.2f}%`"]
+                    
+                    for cal in calidades_detectadas:
+                        if cal in stats["por_calidad"] and stats["por_calidad"][cal]["total"] > 0:
+                            prec_calidad = (stats["por_calidad"][cal]["aciertos"] / stats["por_calidad"][cal]["total"]) * 100
+                            fila.append(f"`{prec_calidad:.2f}%`")
+                        else:
+                            fila.append("`-`")
+                    
+                    md.write("| " + " | ".join(fila) + " |\n")
             md.write("\n")
             
             md.write(f"Los detalles por factura están guardados en: `metrics_paddleocr_base.csv`\n")

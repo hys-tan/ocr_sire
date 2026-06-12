@@ -100,3 +100,4 @@ prueba98.pdf,PaddleOCR Base,alta,66.67,0,1,1,1,0,1,1,1,0,0,1,1
 prueba99.pdf,PaddleOCR Base,alta,66.67,0,1,1,1,0,1,1,1,0,0,1,1
 prueba100.jpeg,PaddleOCR Base,baja,58.33,0,1,1,1,0,1,1,0,0,1,0,1
 prueba101.pdf,PaddleOCR Base,alta,66.67,0,1,1,1,0,1,1,1,0,1,1,0
+PROMEDIO_GLOBAL,PaddleOCR Base,-,51.98,11.88,98.02,98.02,96.04,0.0,77.23,57.43,86.14,1.98,19.8,42.57,34.65
