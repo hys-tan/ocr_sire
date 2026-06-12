@@ -40,7 +40,7 @@ def evaluate_metrics():
     dataset_dir = os.path.abspath(os.path.join(base_dir, "..", "test", "dataset"))
     images_dir = os.path.abspath(os.path.join(base_dir, "..", "test", "images"))
     json_path = os.path.join(dataset_dir, "extraccion.json")
-    output_csv = os.path.join(dataset_dir, "metrics_tesseract_base.csv")
+    output_csv = os.path.join(dataset_dir, "metrics_tesseract_opencv.csv")
 
     if not os.path.exists(json_path):
         logger.error(f"No se encontró el archivo JSON en: {json_path}")
@@ -89,10 +89,10 @@ def evaluate_metrics():
             logger.warning(f"No se encontró la imagen {filename}, omitiendo...")
             continue
             
-        logger.info(f"Procesando: {filename} con Tesseract puro...")
+        logger.info(f"Procesando: {filename} con Tesseract + OpenCV...")
         
         try:
-            # 1. OCR (Solo Tesseract en esta rama)
+            # 1. OCR (Tesseract + OpenCV en esta rama)
             ocr_res = process_document(image_path)
             raw_text = ocr_res["text"]
             word_confidences = ocr_res.get("word_confidences", {})
@@ -112,7 +112,7 @@ def evaluate_metrics():
             
             fila_resultado = {
                 "Archivo": filename,
-                "Motor": "Tesseract Base",
+                "Motor": "Tesseract + OpenCV",
                 "Calidad": calidad
             }
             
@@ -167,7 +167,7 @@ def evaluate_metrics():
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             fila_promedios = {
                 "Archivo": "PROMEDIO_GLOBAL",
-                "Motor": "Tesseract Base",
+                "Motor": "Tesseract + OpenCV",
                 "Calidad": "-",
                 "Precision_Global_Porcentaje": round(precision_total, 2)
             }
@@ -180,17 +180,17 @@ def evaluate_metrics():
             writer.writerow(fila_promedios)
             
         print(f"\n==================================================")
-        print(f"MÉTRICAS FINALIZADAS PARA TESSERACT BASE")
+        print(f"MÉTRICAS FINALIZADAS PARA TESSERACT + OPENCV")
         print(f"Facturas evaluadas: {total_facturas}")
         print(f"Precisión Global del Motor: {precision_total:.2f}%")
         print(f"Resultados guardados en: {output_csv}")
         print(f"==================================================\n")
 
         # Guardar reporte en Markdown
-        md_path = os.path.join(dataset_dir, "global_metrics_tesseract_base.md")
+        md_path = os.path.join(dataset_dir, "global_metrics_tesseract_opencv.md")
         with open(md_path, 'w', encoding='utf-8') as md:
-            md.write("# Reporte de Métricas: Tesseract Base\n\n")
-            md.write(f"- **Motor:** Tesseract puro (Sin OpenCV)\n")
+            md.write("# Reporte de Métricas: Tesseract + OpenCV\n\n")
+            md.write(f"- **Motor:** Tesseract con preprocesamiento en OpenCV\n")
             md.write(f"- **Facturas evaluadas:** {total_facturas}\n")
             md.write(f"- **Total de campos evaluados:** {total_campos_global}\n")
             md.write(f"- **Total de aciertos exactos:** {total_aciertos_global}\n")
@@ -226,7 +226,7 @@ def evaluate_metrics():
                     md.write("| " + " | ".join(fila) + " |\n")
             md.write("\n")
             
-            md.write(f"Los detalles por factura están guardados en: `metrics_tesseract_base.csv`\n")
+            md.write(f"Los detalles por factura están guardados en: `metrics_tesseract_opencv.csv`\n")
         print(f"Reporte visual guardado en: {md_path}\n")
     else:
         logger.warning("No se procesó ninguna factura. Revisa las rutas.")

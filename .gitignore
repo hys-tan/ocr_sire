@@ -90,3 +90,6 @@ backend/test/images/*
 
 !backend/test/dataset/global_metrics_tesseract_base.md
 !backend/test/dataset/metrics_tesseract_base.csv
+
+!backend/test/dataset/global_metrics_tesseract_opencv.md
+!backend/test/dataset/metrics_tesseract_opencv.csv
