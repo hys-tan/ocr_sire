@@ -40,7 +40,7 @@ def evaluate_metrics():
     dataset_dir = os.path.abspath(os.path.join(base_dir, "..", "test", "dataset"))
     images_dir = os.path.abspath(os.path.join(base_dir, "..", "test", "images"))
     json_path = os.path.join(dataset_dir, "extraccion.json")
-    output_csv = os.path.join(dataset_dir, "metrics_paddleocr_base.csv")
+    output_csv = os.path.join(dataset_dir, "metrics_paddleocr_opencv.csv")
 
     if not os.path.exists(json_path):
         logger.error(f"No se encontró el archivo JSON en: {json_path}")
@@ -112,7 +112,7 @@ def evaluate_metrics():
             
             fila_resultado = {
                 "Archivo": filename,
-                "Motor": "PaddleOCR Base",
+                "Motor": "PaddleOCR + OpenCV",
                 "Calidad": calidad
             }
             
@@ -167,7 +167,7 @@ def evaluate_metrics():
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             fila_promedios = {
                 "Archivo": "PROMEDIO_GLOBAL",
-                "Motor": "PaddleOCR Base",
+                "Motor": "PaddleOCR + OpenCV",
                 "Calidad": "-",
                 "Precision_Global_Porcentaje": round(precision_total, 2)
             }
@@ -180,17 +180,17 @@ def evaluate_metrics():
             writer.writerow(fila_promedios)
             
         print(f"\n==================================================")
-        print(f"MÉTRICAS FINALIZADAS PARA PADDLEOCR BASE")
+        print(f"MÉTRICAS FINALIZADAS PARA PADDLEOCR + OPENCV")
         print(f"Facturas evaluadas: {total_facturas}")
         print(f"Precisión Global del Motor: {precision_total:.2f}%")
         print(f"Resultados guardados en: {output_csv}")
         print(f"==================================================\n")
 
         # Guardar reporte en Markdown
-        md_path = os.path.join(dataset_dir, "global_metrics_paddleocr_base.md")
+        md_path = os.path.join(dataset_dir, "global_metrics_paddleocr_opencv.md")
         with open(md_path, 'w', encoding='utf-8') as md:
-            md.write("# Reporte de Métricas: PaddleOCR Base\n\n")
-            md.write(f"- **Motor:** PaddleOCR puro (Sin OpenCV ni Tesseract)\n")
+            md.write("# Reporte de Métricas: PaddleOCR + OpenCV\n\n")
+            md.write(f"- **Motor:** PaddleOCR con preprocesamiento en OpenCV\n")
             md.write(f"- **Facturas evaluadas:** {total_facturas}\n")
             md.write(f"- **Total de campos evaluados:** {total_campos_global}\n")
             md.write(f"- **Total de aciertos exactos:** {total_aciertos_global}\n")
@@ -226,7 +226,7 @@ def evaluate_metrics():
                     md.write("| " + " | ".join(fila) + " |\n")
             md.write("\n")
             
-            md.write(f"Los detalles por factura están guardados en: `metrics_paddleocr_base.csv`\n")
+            md.write(f"Los detalles por factura están guardados en: `metrics_paddleocr_opencv.csv`\n")
         print(f"Reporte visual guardado en: {md_path}\n")
     else:
         logger.warning("No se procesó ninguna factura. Revisa las rutas.")

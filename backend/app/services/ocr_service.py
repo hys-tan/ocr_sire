@@ -90,13 +90,49 @@ def run_paddleocr_and_adapt(img_path_or_array) -> dict:
         "engine_used": "paddleocr"
     }
 
+def preprocess_image_with_opencv(img_input):
+    """
+    Aplica técnicas de Visión Computacional (OpenCV) para limpiar 
+    la imagen antes de enviarla al OCR.
+    """
+    logger.info("Aplicando filtros de OpenCV (Grises + GaussianBlur + Otsu Binarization)...")
+    
+    if isinstance(img_input, str):
+        img = cv2.imread(img_input)
+    else:
+        img = np.array(img_input)
+        # Convertir RGB de PIL a BGR de OpenCV si es necesario
+        if len(img.shape) == 3 and img.shape[2] == 3:
+            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            
+    if img is None:
+        raise ValueError("No se pudo cargar la imagen para OpenCV.")
+
+    # 1. Escala de grises
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    
+    # 2. Reducción leve de ruido
+    blur = cv2.GaussianBlur(gray, (3,3), 0)
+    
+    # 3. Binarización Otsu (muy efectiva para contrastar letras negras sobre fondo blanco/gris)
+    _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    
+    # Como PaddleOCR espera idealmente 3 canales, convertimos la binaria de vuelta a RGB
+    # Esto evita problemas internos del motor
+    thresh_rgb = cv2.cvtColor(thresh, cv2.COLOR_GRAY2RGB)
+    
+    return thresh_rgb
+
 def extract_text_from_image(image_path: str) -> dict:
     """
-    Extrae texto de una imagen (.png, .jpg) usando PaddleOCR.
+    Extrae texto de una imagen (.png, .jpg) usando PaddleOCR + OpenCV.
     Devuelve un diccionario con {"text": ..., "word_confidences": ...}.
     """
-    # Pasar la imagen original directamente a PaddleOCR sin filtros de OpenCV
-    return run_paddleocr_and_adapt(image_path)
+    # 1. Preprocesar con OpenCV
+    processed_img = preprocess_image_with_opencv(image_path)
+    
+    # 2. Pasar la imagen limpia a PaddleOCR
+    return run_paddleocr_and_adapt(processed_img)
 
 def extract_text_from_pdf(pdf_path: str) -> dict:
     """
@@ -122,8 +158,11 @@ def extract_text_from_pdf(pdf_path: str) -> dict:
         # Convertir Pixmap a formato PIL Image
         img_pil = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         
-        # Como PaddleOCR no requiere preprocesamiento estricto, le pasamos el array RGB directamente
-        page_result = run_paddleocr_and_adapt(np.array(img_pil))
+        # 1. Preprocesar con OpenCV la imagen extraída del PDF
+        processed_img = preprocess_image_with_opencv(img_pil)
+        
+        # 2. Enviar a PaddleOCR
+        page_result = run_paddleocr_and_adapt(processed_img)
         
         full_text += f"\n--- Página {page_num + 1} ---\n"
         full_text += page_result["text"]
@@ -158,7 +197,7 @@ def process_document(file_path: str) -> dict:
 
 # --- PRUEBA LOCAL ---
 if __name__ == "__main__":
-    print("=== PRUEBA DE OCR (PADDLEOCR PURO) ===")
+    print("=== PRUEBA DE OCR (PADDLEOCR + OPENCV) ===")
     print("Coloca una imagen o PDF en la carpeta 'assets' y cambia la ruta aquí abajo.")
     
     # Ruta relativa al directorio donde ejecutas el script (carpeta backend)
