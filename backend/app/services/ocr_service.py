@@ -1,8 +1,8 @@
 import os
 from PIL import Image
-import cv2
 import numpy as np
 import logging
+import pytesseract
 
 try:
     import fitz  # PyMuPDF para manejar PDFs
@@ -12,132 +12,89 @@ except ImportError:
 # Configurar logger
 logger = logging.getLogger("ExtractorSIRE.OCR")
 
-_paddle_engine = None
+# Ruta al ejecutable de Tesseract en Windows
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-def get_paddle_engine():
-    """Carga Perezosa (Lazy Loading) de PaddleOCR para no afectar el inicio del backend."""
-    global _paddle_engine
-    if _paddle_engine is None:
-        logger.info("Inicializando motor PaddleOCR por primera vez (esto puede tardar unos segundos)...")
-        from paddleocr import PaddleOCR
-        # use_angle_cls=True permite detectar texto rotado. lang='es' para español.
-        # show_log=False evita que Paddle inunde la consola con mensajes DEBUG
-        _paddle_engine = PaddleOCR(use_angle_cls=True, lang='es', show_log=False)
-        logger.info("PaddleOCR inicializado correctamente.")
-    return _paddle_engine
-
-def run_paddleocr_and_adapt(img_path_or_array) -> dict:
+def run_tesseract_and_adapt(img_input) -> dict:
     """
-    Ejecuta PaddleOCR y adapta su salida a nuestro formato de diccionario.
+    Ejecuta Tesseract OCR y adapta su salida a nuestro formato de diccionario.
+    Recibe una ruta de imagen (str) o un objeto PIL Image / numpy array.
     """
-    engine = get_paddle_engine()
-    logger.info("Ejecutando extracción profunda con PaddleOCR...")
+    logger.info("Ejecutando extracción con Tesseract OCR...")
     
-    # Ejecutar PaddleOCR. Devuelve una lista de resultados por línea detectada.
-    result = engine.ocr(img_path_or_array, cls=True)
+    # Si es una ruta, abrir con PIL
+    if isinstance(img_input, str):
+        img = Image.open(img_input)
+    elif isinstance(img_input, np.ndarray):
+        img = Image.fromarray(img_input)
+    else:
+        img = img_input  # Ya es PIL Image
     
-    reconstructed_text = ""
+    # Usar image_to_data para obtener texto + confianza por palabra
+    # lang='spa' para español, config con --psm 6 (bloque de texto uniforme)
+    data = pytesseract.image_to_data(
+        img, lang='spa', output_type=pytesseract.Output.DICT,
+        config='--psm 6'
+    )
+    
     word_conf_dict = {}
     total_conf = 0
     word_count = 0
+    line_texts = {}  # Agrupamos por número de línea
     
-    # result puede ser None o una lista que contiene una lista (por página)
-    if not result or not result[0]:
-        return {
-            "text": "",
-            "word_confidences": {},
-            "avg_confidence": 0,
-            "engine_used": "paddleocr"
-        }
+    for i in range(len(data["text"])):
+        text = data["text"][i].strip()
+        conf = int(data["conf"][i])
+        line_num = data["line_num"][i]
+        block_num = data["block_num"][i]
         
-    line_texts = []
-    
-    for idx, line in enumerate(result[0]):
-        # line tiene el formato: [[caja delimitadora], (texto, confianza)]
-        box = line[0]
-        text_tuple = line[1]
-        text = text_tuple[0]
-        # PaddleOCR devuelve la confianza de 0.0 a 1.0. 
-        confidence = int(float(text_tuple[1]) * 100)
-        
-        # Limpiar texto
-        text_clean = text.strip()
-        if not text_clean:
+        # Tesseract devuelve conf=-1 para separadores vacíos, los ignoramos
+        if conf < 0 or not text:
             continue
-            
-        line_texts.append(text_clean)
         
-        # Dividir la frase detectada en palabras para el diccionario
-        words = text_clean.split()
-        for w in words:
-            lookup_word = w.lower().strip(".,:-_?¿!¡()[]{}'\"/\\")
-            if lookup_word:
-                if lookup_word not in word_conf_dict:
-                    word_conf_dict[lookup_word] = []
-                word_conf_dict[lookup_word].append(confidence)
-                total_conf += confidence
-                word_count += 1
-                
-    reconstructed_text = "\n".join(line_texts)
+        # Agrupar texto por bloque y línea para reconstruir el documento
+        line_key = (block_num, line_num)
+        if line_key not in line_texts:
+            line_texts[line_key] = []
+        line_texts[line_key].append(text)
+        
+        # Guardar confianza por palabra
+        lookup_word = text.lower().strip(".,:-_?¿!¡()[]{}'\"/\\")
+        if lookup_word:
+            if lookup_word not in word_conf_dict:
+                word_conf_dict[lookup_word] = []
+            word_conf_dict[lookup_word].append(conf)
+            total_conf += conf
+            word_count += 1
+    
+    # Reconstruir texto línea por línea
+    sorted_keys = sorted(line_texts.keys())
+    reconstructed_lines = [" ".join(line_texts[k]) for k in sorted_keys]
+    reconstructed_text = "\n".join(reconstructed_lines)
+    
     avg_conf = (total_conf / word_count) if word_count > 0 else 0
     
-    logger.info(f"PaddleOCR finalizado. Confianza promedio: {avg_conf:.2f}%")
+    logger.info(f"Tesseract finalizado. Confianza promedio: {avg_conf:.2f}%")
     
     return {
         "text": reconstructed_text,
         "word_confidences": word_conf_dict,
         "avg_confidence": avg_conf,
-        "engine_used": "paddleocr"
+        "engine_used": "tesseract"
     }
-
-def preprocess_image_with_opencv(img_input):
-    """
-    Aplica técnicas de Visión Computacional (OpenCV) para limpiar 
-    la imagen antes de enviarla al OCR.
-    """
-    logger.info("Aplicando filtros de OpenCV (Grises + GaussianBlur + Otsu Binarization)...")
-    
-    if isinstance(img_input, str):
-        img = cv2.imread(img_input)
-    else:
-        img = np.array(img_input)
-        # Convertir RGB de PIL a BGR de OpenCV si es necesario
-        if len(img.shape) == 3 and img.shape[2] == 3:
-            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-            
-    if img is None:
-        raise ValueError("No se pudo cargar la imagen para OpenCV.")
-
-    # 1. Escala de grises
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # 2. Reducción leve de ruido
-    blur = cv2.GaussianBlur(gray, (3,3), 0)
-    
-    # 3. Binarización Otsu (muy efectiva para contrastar letras negras sobre fondo blanco/gris)
-    _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    
-    # Como PaddleOCR espera idealmente 3 canales, convertimos la binaria de vuelta a RGB
-    # Esto evita problemas internos del motor
-    thresh_rgb = cv2.cvtColor(thresh, cv2.COLOR_GRAY2RGB)
-    
-    return thresh_rgb
 
 def extract_text_from_image(image_path: str) -> dict:
     """
-    Extrae texto de una imagen (.png, .jpg) usando PaddleOCR + OpenCV.
+    Extrae texto de una imagen (.png, .jpg) usando Tesseract puro.
     Devuelve un diccionario con {"text": ..., "word_confidences": ...}.
     """
-    # 1. Preprocesar con OpenCV
-    processed_img = preprocess_image_with_opencv(image_path)
-    
-    # 2. Pasar la imagen limpia a PaddleOCR
-    return run_paddleocr_and_adapt(processed_img)
+    # Pasar la imagen original directamente a Tesseract sin filtros de OpenCV
+    return run_tesseract_and_adapt(image_path)
 
 def extract_text_from_pdf(pdf_path: str) -> dict:
     """
     Extrae texto de un archivo PDF convirtiendo cada página en imagen
-    y pasándola por PaddleOCR. Requiere instalar PyMuPDF.
+    y pasándola por Tesseract. Requiere instalar PyMuPDF.
     Devuelve un diccionario con {"text": ..., "word_confidences": ...}.
     """
     if fitz is None:
@@ -149,7 +106,7 @@ def extract_text_from_pdf(pdf_path: str) -> dict:
     
     for page_num in range(len(doc)):
         page = doc.load_page(page_num)
-        # Aumentar la resolución de la imagen (zoom) para ayudar a PaddleOCR a ver mejor
+        # Aumentar la resolución de la imagen (zoom) para ayudar a Tesseract a ver mejor
         zoom_x = 2.0  
         zoom_y = 2.0  
         mat = fitz.Matrix(zoom_x, zoom_y)
@@ -158,11 +115,8 @@ def extract_text_from_pdf(pdf_path: str) -> dict:
         # Convertir Pixmap a formato PIL Image
         img_pil = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
         
-        # 1. Preprocesar con OpenCV la imagen extraída del PDF
-        processed_img = preprocess_image_with_opencv(img_pil)
-        
-        # 2. Enviar a PaddleOCR
-        page_result = run_paddleocr_and_adapt(processed_img)
+        # Pasar la imagen cruda directamente a Tesseract (sin OpenCV)
+        page_result = run_tesseract_and_adapt(img_pil)
         
         full_text += f"\n--- Página {page_num + 1} ---\n"
         full_text += page_result["text"]
@@ -197,7 +151,7 @@ def process_document(file_path: str) -> dict:
 
 # --- PRUEBA LOCAL ---
 if __name__ == "__main__":
-    print("=== PRUEBA DE OCR (PADDLEOCR + OPENCV) ===")
+    print("=== PRUEBA DE OCR (TESSERACT PURO) ===")
     print("Coloca una imagen o PDF en la carpeta 'assets' y cambia la ruta aquí abajo.")
     
     # Ruta relativa al directorio donde ejecutas el script (carpeta backend)
