@@ -73,3 +73,23 @@ temp/
 
 # Configuración local de agentes
 .claude/
+
+
+# Test data backend
+backend/test/dataset/*
+backend/test/images/*
+!backend/test/dataset/file.txt
+!backend/test/images/file.txt
+
+# Metrics
+!backend/test/dataset/global_metrics_paddleocr_base.md
+!backend/test/dataset/metrics_paddleocr_base.csv
+
+!backend/test/dataset/global_metrics_paddleocr_opencv.md
+!backend/test/dataset/metrics_paddleocr_opencv.csv
+
+!backend/test/dataset/global_metrics_tesseract_base.md
+!backend/test/dataset/metrics_tesseract_base.csv
+
+!backend/test/dataset/global_metrics_tesseract_opencv.md
+!backend/test/dataset/metrics_tesseract_opencv.csv

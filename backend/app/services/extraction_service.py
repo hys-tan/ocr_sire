@@ -257,7 +257,8 @@ def limpiar_razon_social(text: str) -> str:
         if cutoff in text.upper():
             text = re.split(cutoff, text, flags=re.IGNORECASE)[0]
     
-    # 4. Limpiar puntuación suelta al final y espacios dobles
+    # 4. Limpiar puntuación suelta al inicio/final y espacios dobles
+    text = re.sub(r'^[\s\-\.,:;]+', '', text.strip())
     text = re.sub(r'[\s\-\.,:;]+$', '', text.strip())
     text = re.sub(r'\s{2,}', ' ', text)
     
