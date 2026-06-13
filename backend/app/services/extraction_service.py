@@ -5,6 +5,7 @@ from typing import Dict, Any
 from app.services.normalization_service import aplicar_normalizacion
 from app.core.normalization_rules import correccion_contextual_numerica
 from app.services.confidence_service import enriquecer_lote_con_confianza_hibrida
+from app.services.nlp_service import nlp_service
 
 # Configurar Logging para auditar estrategias y facilitar debugging
 logging.basicConfig(
@@ -304,12 +305,21 @@ PATRONES_RECEPTOR = [
 ]
 
 def extract_razon_social_emisor(lines: list, ruc_line_idx: int) -> Dict[str, str]:
-    """Busca la razón social del emisor usando múltiples estrategias."""
+    """Busca la razón social del emisor usando ML + spaCy NER o heurísticas."""
+    
+    # 0. ML + spaCy (Inteligencia Artificial)
+    for line in lines[:15]: # Emisor suele estar arriba
+        if nlp_service.clasificar_linea(line) == "BLOQUE_EMISOR":
+            entidad = nlp_service.extraer_entidad_ner(line)
+            if entidad and is_valid_razon_social(entidad):
+                estrategia = "ML + spaCy NER (ORG)"
+                logger.info(f"Emisor extraído [ML + spaCy]: {entidad}")
+                return {"valor": entidad, "confianza": "ALTA", "estrategia": estrategia, "score": 95}
+                
     if ruc_line_idx > 0:
         posible_razon = limpiar_razon_social(lines[ruc_line_idx - 1].strip())
         if is_valid_razon_social(posible_razon):
             logger.info(f"Emisor extraído [Est. 1 - Proximidad RUC]: {posible_razon}")
-            estrategia = "Est. 1 - Proximidad RUC"
             return {"valor": posible_razon, "confianza": "ALTA", "estrategia": estrategia, "score": calcular_score(estrategia, "ALTA")}
             
     # Estrategia 3: Heurística de Mayúsculas al inicio del documento
@@ -324,9 +334,18 @@ def extract_razon_social_emisor(lines: list, ruc_line_idx: int) -> Dict[str, str
     return {"valor": "No detectado", "confianza": "BAJA", "estrategia": "Fallback", "score": calcular_score("Fallback", "BAJA")}
 
 def extract_razon_social_receptor(lines: list, receptor_ruc: str = None) -> Dict[str, str]:
-    """Busca la razón social del receptor mediante patrones regex flexibles o proximidad al RUC."""
+    """Busca la razón social del receptor mediante ML + spaCy NER o reglas estáticas."""
 
-    # Estrategia 2: Búsqueda por patrones keyword (con regex flexible y normalización)
+    # 1. Estrategia 1: Inteligencia Artificial (Scikit-Learn + spaCy NER)
+    for line in lines:
+        if nlp_service.clasificar_linea(line) == "BLOQUE_RECEPTOR":
+            entidad = nlp_service.extraer_entidad_ner(line, expected_labels=["ORG", "PER"])
+            if entidad and is_valid_razon_social(entidad):
+                estrategia = "ML + spaCy NER (ORG/PER)"
+                logger.info(f"Receptor extraído [ML + spaCy]: {entidad}")
+                return {"valor": entidad, "confianza": "ALTA", "estrategia": estrategia, "score": 95}
+
+    # 2. Estrategia 2: Búsqueda por patrones keyword (con regex flexible y normalización)
     for i, line in enumerate(lines):
         line_norm = normalizar_para_busqueda(line)  # Solo para matching
 
