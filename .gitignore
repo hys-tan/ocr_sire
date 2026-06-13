@@ -73,3 +73,14 @@ temp/
 
 # Configuración local de agentes
 .claude/
+
+# Test data backend
+backend/test/dataset/*
+backend/test/images/*
+!backend/test/dataset/file.txt
+!backend/test/images/file.txt
+
+# Ignorar todos los reportes de métricas
+*.csv
+metrics_*.md
+global_metrics_*.md
