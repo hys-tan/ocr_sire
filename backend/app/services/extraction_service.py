@@ -485,6 +485,7 @@ def parse_invoice(raw_text: str, word_confidences: Dict[str, list] = None) -> Di
     montos["subtotal"]= aplicar_normalizacion('subtotal',              montos["subtotal"])
     montos["igv"]     = aplicar_normalizacion('igv',                   montos["igv"])
     montos["total"]   = aplicar_normalizacion('total',                 montos["total"])
+    moneda            = aplicar_normalizacion('moneda',                moneda)
 
     logger.info("=== Normalización Aplicada ===")
 

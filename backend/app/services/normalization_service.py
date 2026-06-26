@@ -8,7 +8,8 @@ from app.core.normalization_rules import (
     normalizar_razon_social,
     normalizar_ruc,
     normalizar_fecha,
-    normalizar_monto
+    normalizar_monto,
+    normalizar_moneda
 )
 
 def aplicar_normalizacion(campo: str, field_dict: dict) -> dict:
@@ -38,6 +39,9 @@ def aplicar_normalizacion(campo: str, field_dict: dict) -> dict:
         # Para montos, los dejamos como vienen, pero en el futuro podríamos 
         # usar la corrección contextual numérica si vienen en formato texto.
         valor_normalizado = normalizar_monto(valor_original)
+        
+    elif campo == 'moneda':
+        valor_normalizado = normalizar_moneda(str(valor_original))
 
     # Solo añadir si realmente difiere del original
     result = dict(field_dict)
