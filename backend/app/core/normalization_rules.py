@@ -127,6 +127,31 @@ def normalizar_monto(valor: float) -> float:
         return valor
     return round(valor, 2)
 
+def normalizar_moneda(texto: str) -> str:
+    """
+    Estandariza monedas al formato ISO 4217 (ej. PEN, USD).
+    Homologa variantes detectadas por el OCR (SOLES, S/, $, etc.).
+    """
+    if not texto:
+        return texto
+    
+    texto_limpio = str(texto).upper().strip()
+    # Mapeo a PEN
+    if texto_limpio in ['SOLES', 'S/.', 'S/', 'S', 'PEN', 'S/. ', ' S/.']:
+        return 'PEN'
+    
+    # Mapeo a USD
+    if texto_limpio in ['DOLARES', '$', 'USD']:
+        return 'USD'
+        
+    # Si no es exacto, usamos regex por si el OCR juntó basura
+    if re.search(r'SOL|S/|PEN|\bS\b', texto_limpio):
+        return 'PEN'
+    if re.search(r'DOLAR|USD|\$', texto_limpio):
+        return 'USD'
+        
+    return texto
+
 
 def normalizar_numero_sunat(numero_raw: str) -> dict:
     """
