@@ -62,12 +62,12 @@ def entrenar_modelo():
     df_metrics = pd.DataFrame(report_dict).transpose()
     
     # Generar CSV
-    csv_path = os.path.join("test", "dataset", "metricas_modelo_hibrido.csv")
+    csv_path = os.path.join("test", "dataset", "metricas_modelo_hibrido_DESPUES.csv")
     os.makedirs(os.path.dirname(csv_path), exist_ok=True)
     df_metrics.to_csv(csv_path, float_format="%.4f")
     
     # Generar Markdown
-    md_path = os.path.join("test", "dataset", "metricas_modelo_hibrido.md")
+    md_path = os.path.join("test", "dataset", "metricas_modelo_hibrido_DESPUES.md")
     with open(md_path, "w", encoding="utf-8") as f:
         f.write("# Métricas del Modelo Híbrido (Scikit-Learn Naive Bayes)\n\n")
         f.write("## Reporte de Clasificación\n")
