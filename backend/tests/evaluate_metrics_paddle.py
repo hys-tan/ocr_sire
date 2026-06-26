@@ -40,7 +40,7 @@ def evaluate_metrics():
     dataset_dir = os.path.abspath(os.path.join(base_dir, "..", "test", "dataset"))
     images_dir = os.path.abspath(os.path.join(base_dir, "..", "test", "images"))
     json_path = os.path.join(dataset_dir, "extraccion.json")
-    output_csv = os.path.join(dataset_dir, "metrics_paddleocr_base.csv")
+    output_csv = os.path.join(dataset_dir, "metrics_paddleocr_base_DESPUES.csv")
 
     if not os.path.exists(json_path):
         logger.error(f"No se encontró el archivo JSON en: {json_path}")
@@ -120,6 +120,14 @@ def evaluate_metrics():
                 valor_esperado = expected_data.get(categoria, {}).get(campo, "")
                 valor_extraido = final_data.get(categoria, {}).get(campo, "")
                 
+                if campo == "moneda":
+                    from app.core.normalization_rules import normalizar_moneda
+                    # Estandarizar el Ground Truth
+                    valor_esperado = normalizar_moneda(str(valor_esperado))
+                    # Estandarizar la extracción (sacar el valor real del diccionario)
+                    if isinstance(valor_extraido, dict):
+                        valor_extraido = str(valor_extraido.get("valor_normalizado") or valor_extraido.get("valor", ""))
+                        
                 acierto = compare_values(valor_esperado, valor_extraido)
                 aciertos_factura += acierto
                 
@@ -187,7 +195,7 @@ def evaluate_metrics():
         print(f"==================================================\n")
 
         # Guardar reporte en Markdown
-        md_path = os.path.join(dataset_dir, "global_metrics_paddleocr_base.md")
+        md_path = os.path.join(dataset_dir, "global_metrics_paddleocr_base_DESPUES.md")
         with open(md_path, 'w', encoding='utf-8') as md:
             md.write("# Reporte de Métricas: PaddleOCR Base\n\n")
             md.write(f"- **Motor:** PaddleOCR puro (Sin OpenCV ni Tesseract)\n")
@@ -226,7 +234,7 @@ def evaluate_metrics():
                     md.write("| " + " | ".join(fila) + " |\n")
             md.write("\n")
             
-            md.write(f"Los detalles por factura están guardados en: `metrics_paddleocr_base.csv`\n")
+            md.write(f"Los detalles por factura están guardados en: `metrics_paddleocr_base_DESPUES.csv`\n")
         print(f"Reporte visual guardado en: {md_path}\n")
     else:
         logger.warning("No se procesó ninguna factura. Revisa las rutas.")
