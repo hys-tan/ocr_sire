@@ -16,18 +16,18 @@ os.makedirs(REPORTES_DIR, exist_ok=True)
 
 # 1. Archivos de extracción final (Regex vs Ground Truth)
 extraction_files = {
-    "Tesseract Puro": "metrics_tesseract_base.csv",
-    "Tesseract + OpenCV": "metrics_tesseract_opencv.csv",
-    "PaddleOCR + OpenCV": "metrics_paddleocr_opencv.csv",
-    "PaddleOCR Puro": "metrics_paddleocr_base.csv"
+    "Tesseract Puro": "metrics_tesseract_base_DESPUES.csv",
+    "Tesseract + OpenCV": "metrics_tesseract_opencv_DESPUES.csv",
+    "PaddleOCR + OpenCV": "metrics_paddleocr_opencv_DESPUES.csv",
+    "PaddleOCR Puro": "metrics_paddleocr_base_DESPUES.csv"
 }
 
 # 2. Archivos de reconocimiento óptico puro (Motor OCR vs Ground Truth)
 optical_files = {
-    "Tesseract Puro": "metrics_tesseract_optico.csv",
-    "Tesseract + OpenCV": "metrics_tesseract_opencv_optico.csv",
-    "PaddleOCR + OpenCV": "metrics_paddle_opencv_optico.csv",
-    "PaddleOCR Puro": "metrics_paddleocr_optico.csv"
+    "Tesseract Puro": "1_metrics_tesseract_optico.csv",
+    "Tesseract + OpenCV": "1_metrics_tesseract_opencv_optico.csv",
+    "PaddleOCR + OpenCV": "1_metrics_paddle_opencv_optico.csv",
+    "PaddleOCR Puro": "1_metrics_paddleocr_optico.csv"
 }
 
 def analyze_extraction():
